@@ -18,7 +18,46 @@
                 <div class="chess-board" id="chessBoard"></div>
             </div>
             <!-- Горизонтальные метки файлов -->
-            <div class="file-labels" id="fileLabels"></div>
+            <div class="file-labels" id="fileLabels"></div><!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>♜ Тренажёр шахматных координат </title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <div class="board-wrapper">
+    <div class="board-row-container">
+      <div class="rank-labels" id="rankLabels"></div>
+      <div class="chess-board" id="chessBoard"></div>
+    </div>
+    <div class="file-labels" id="fileLabels"></div>
+  </div>
+
+  <div class="controls">
+    <div class="controls-row">
+      <button class="btn" id="nextBtn">⟳ Следующая</button>
+      <button class="btn rotate-btn" id="rotateBtn">⟳ Повернуть доску</button>
+      <button class="btn start-stop-btn" id="startStopBtn">▶ Старт</button>
+
+      <div class="mode-selector">
+        <button class="mode-btn" data-mode="random" id="modeRandomBtn">🎲 Случайно</button>
+        <button class="mode-btn" data-mode="knight" id="modeKnightBtn">🐴конь</button>
+      </div>
+
+      <div class="interval-control">
+        <span class="interval-label">⏱ интервал</span>
+        <input type="number" id="intervalInput" class="time-input" min="0.5" max="10" step="0.5" value="1">
+        <span class="time-unit">сек</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="scripts.js"></script>
+</body>
+</html>
         </div>
 
         <!-- Единая строка управления -->
