@@ -1,4 +1,3 @@
-/* ----- RESET & БАЗОВЫЕ СТИЛИ (единая стилистика с блоком интервала) ----- */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -6,32 +5,14 @@
 }
 
 body {
-  /* Фон в стилистике блока интервала: тёмный градиент с акцентным оттенком */
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
-  font-family: 'Segoe UI', 'Roboto', system-ui, sans-serif;
+  background: #1a1c20;
+  font-family: 'Segoe UI', 'Roboto', 'Inter', system-ui, sans-serif;
   min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
   margin: 0;
   padding: 20px;
-  position: relative;
-}
-
-/* Декоративный элемент фона (лёгкая сетка) */
-body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image: 
-    linear-gradient(rgba(176, 136, 99, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(176, 136, 99, 0.05) 1px, transparent 1px);
-  background-size: 30px 30px;
-  pointer-events: none;
-  z-index: 0;
 }
 
 .app {
@@ -40,11 +21,8 @@ body::before {
   align-items: center;
   max-width: 800px;
   width: 100%;
-  position: relative;
-  z-index: 1;
 }
 
-/* ----- ОБЁРТКА ДОСКИ И ПОДПИСЕЙ ----- */
 .board-wrapper {
   display: flex;
   flex-direction: column;
@@ -55,23 +33,20 @@ body::before {
 .board-row-container {
   display: flex;
   width: 100%;
-  /* Важно: задаём минимальную высоту для корректного отображения */
-  min-height: 0;
 }
 
-/* Вертикальные подписи (ранги) */
 .rank-labels {
   display: flex;
   flex-direction: column;
   justify-content: space-around;
   align-items: center;
-  width: 30px;
+  width: 32px;
   flex-shrink: 0;
-  color: #c4b8a8;
-  font-weight: 600;
-  font-size: 18px;
+  color: #9aa0a8;
+  font-weight: 500;
+  font-size: 16px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   user-select: none;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
 .rank-labels span {
@@ -82,43 +57,33 @@ body::before {
   width: 100%;
 }
 
-/* Сетка шахматной доски */
 .chess-board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
   flex: 1;
-  /* Важно: задаём явную ширину и высоту через aspect-ratio */
-  width: 100%;
   aspect-ratio: 1 / 1;
-  border: 3px solid #b58863;
-  border-radius: 8px;
+  border: 2px solid #2d2f36;
+  border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(176, 136, 99, 0.3);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
   transition: transform 0.3s ease;
-  /* Дополнительная страховка */
-  min-width: 0;
-  min-height: 0;
 }
 
-/* Поворот доски (анимация + вращение) */
 .chess-board.rotated {
   transform: rotate(180deg);
 }
 
-/* Ячейка (клетка) */
 .cell {
   position: relative;
   width: 100%;
   height: 100%;
-  border: 0.5px solid rgba(40, 30, 20, 0.2);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Цвета полей (классическая шахматная палитра) */
 .cell.light {
   background-color: #f0d9b5;
 }
@@ -127,7 +92,6 @@ body::before {
   background-color: #b58863;
 }
 
-/* Эффект подсветки выбранной клетки */
 .cell.highlight::before {
   content: "";
   position: absolute;
@@ -135,20 +99,32 @@ body::before {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(220, 70, 70, 0.8);
-  box-shadow: inset 0 0 0 3px rgba(255, 215, 0, 0.9);
+  background-color: rgba(200, 60, 60, 0.82);
+  box-shadow: inset 0 0 0 3px rgba(255, 210, 80, 0.95);
   pointer-events: none;
   z-index: 1;
 }
 
-/* Координата внутри клетки (отображается только при подсветке) */
+.cell.knight-move-highlight::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(70, 130, 200, 0.55);
+  box-shadow: inset 0 0 0 2px rgba(100, 200, 255, 0.9);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .cell-coordinate {
   position: relative;
   z-index: 5;
   color: white;
   font-size: clamp(1.5rem, 8vw, 4rem);
   font-weight: 800;
-  text-shadow: 3px 3px 8px #000000, 0 0 15px #000000;
+  text-shadow: 2px 2px 6px #000000;
   letter-spacing: 1px;
   font-family: 'Segoe UI', 'Arial Black', sans-serif;
   pointer-events: none;
@@ -157,39 +133,35 @@ body::before {
   transition: opacity 0.12s ease;
 }
 
-/* При повороте доски текст координат тоже поворачивается, чтобы оставаться читаемым */
 .chess-board.rotated .cell-coordinate {
   transform: rotate(180deg);
 }
 
-/* Показываем координату только на подсвеченной клетке */
 .cell.highlight .cell-coordinate {
   opacity: 1;
 }
 
-/* Горизонтальные подписи (вертикали / файлы) */
 .file-labels {
   display: flex;
   justify-content: space-around;
   width: 100%;
-  padding-left: 30px;
+  padding-left: 32px;
   margin-top: 8px;
-  color: #c4b8a8;
-  font-weight: 600;
-  font-size: 18px;
+  color: #9aa0a8;
+  font-weight: 500;
+  font-size: 16px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   user-select: none;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  text-transform: lowercase;
 }
 
 .file-labels span {
   flex: 1;
   text-align: center;
-  text-transform: uppercase;
 }
 
-/* ----- ПАНЕЛИ УПРАВЛЕНИЯ (стилизованы под блок интервала) ----- */
 .controls {
-  margin-top: 30px;
+  margin-top: 28px;
   width: 100%;
 }
 
@@ -198,211 +170,165 @@ body::before {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 15px 20px;
-  background: rgba(15, 15, 26, 0.7);
-  backdrop-filter: blur(8px);
-  padding: 15px 30px;
-  border-radius: 60px;
-  border: 1px solid rgba(176, 136, 99, 0.5);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  gap: 12px;
+  background: #23262e;
+  padding: 12px 24px;
+  border-radius: 48px;
+  border: 1px solid #3a3e48;
   width: 100%;
 }
 
-/* Кнопки в стиле блока интервала */
 .btn {
-  background: linear-gradient(135deg, #2a2a40 0%, #1e1e30 100%);
-  border: 1px solid rgba(176, 136, 99, 0.5);
-  border-radius: 40px;
-  padding: 12px 24px;
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: #f0e6d2;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: #2d3038;
+  border: 1px solid #444851;
+  border-radius: 32px;
+  padding: 10px 22px;
+  font-size: 1rem;
+  font-weight: 500;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #e8eaed;
   cursor: pointer;
-  transition: all 0.2s ease;
-  letter-spacing: 0.5px;
-  min-width: 140px;
-  backdrop-filter: blur(4px);
+  transition: all 0.15s ease;
+  letter-spacing: 0.3px;
+  min-width: 130px;
 }
 
 .btn:hover {
-  background: linear-gradient(135deg, #3c3c5a 0%, #2a2a42 100%);
-  transform: translateY(-2px);
-  border-color: rgba(176, 136, 99, 0.8);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+  background: #3a3e48;
+  border-color: #5f6570;
+  transform: translateY(-1px);
 }
 
 .btn:active {
   transform: translateY(1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  background: #24272e;
 }
 
 .btn.rotate-btn {
-  background: linear-gradient(135deg, #3a2a50 0%, #2a1e3a 100%);
-  border-color: rgba(155, 111, 176, 0.5);
+  background: #262932;
+  border-color: #4a4e5a;
 }
 
 .btn.rotate-btn:hover {
-  background: linear-gradient(135deg, #4e3a6a 0%, #3a2a50 100%);
-  border-color: rgba(155, 111, 176, 0.8);
+  background: #333742;
 }
 
-/* Кнопка Старт/Стоп — динамический стиль, единая гамма */
 .btn.start-stop-btn {
-  background: linear-gradient(135deg, #2a5a3a 0%, #1e442e 100%);
-  border-color: rgba(111, 191, 111, 0.5);
+  background: #2a3a2e;
+  border-color: #4a6a4e;
+  color: #d4ecd6;
 }
 
 .btn.start-stop-btn:hover {
-  background: linear-gradient(135deg, #3c6c4a 0%, #2a5538 100%);
-  border-color: rgba(111, 191, 111, 0.8);
+  background: #354a3a;
 }
 
 .btn.start-stop-btn.running {
-  background: linear-gradient(135deg, #8b3a3a 0%, #6b2a2a 100%);
-  border-color: rgba(255, 140, 140, 0.6);
+  background: #4a2e2e;
+  border-color: #8a5a5a;
+  color: #ffd8d8;
 }
 
 .btn.start-stop-btn.running:hover {
-  background: linear-gradient(135deg, #a54a4a 0%, #8a3535 100%);
-  border-color: rgba(255, 140, 140, 0.9);
+  background: #5a3a3a;
 }
 
-/* Блок интервала (эталон стиля) */
+.mode-selector {
+  display: flex;
+  gap: 8px;
+  background: #1e2026;
+  padding: 4px 12px;
+  border-radius: 40px;
+  border: 1px solid #3e424c;
+}
+
+.mode-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 18px;
+  border-radius: 32px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #b0b4bc;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: monospace;
+}
+
+.mode-btn.active {
+  background: #3a3e48;
+  color: #ffffff;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.mode-btn:hover:not(.active) {
+  background: #2d3038;
+  color: #e0e4e9;
+}
+
 .interval-control {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(0, 0, 0, 0.4);
-  padding: 6px 16px;
-  border-radius: 40px;
-  border-left: 2px solid #b58863;
-  border-right: 2px solid #b58863;
-  backdrop-filter: blur(4px);
+  background: #1e2026;
+  padding: 5px 14px;
+  border-radius: 32px;
+  border: 1px solid #3e424c;
 }
 
 .interval-label {
-  color: #f0d9b5;
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-shadow: 0 1px 1px rgba(0,0,0,0.3);
+  color: #bcc0c8;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  font-family: monospace;
 }
 
 .time-input {
-  width: 75px;
-  padding: 7px 12px;
-  border-radius: 30px;
-  border: 2px solid #b58863;
-  background: #1a1a2e;
-  color: #f0e6d2;
-  font-size: 1rem;
-  font-weight: bold;
+  width: 70px;
+  padding: 6px 10px;
+  border-radius: 24px;
+  border: 1px solid #4a4e58;
+  background: #131518;
+  color: #e0e4e9;
+  font-size: 0.9rem;
+  font-weight: 500;
   text-align: center;
   outline: none;
-  transition: all 0.2s ease;
-  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
+  font-family: monospace;
 }
 
 .time-input:focus {
-  border-color: #f0d9b5;
-  box-shadow: 0 0 8px rgba(176, 136, 99, 0.6), inset 0 1px 3px rgba(0,0,0,0.3);
+  border-color: #7a808c;
+  background: #0f1115;
 }
 
 .time-unit {
-  color: #b58863;
-  font-weight: bold;
-  font-size: 0.95rem;
-  text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+  color: #8a909c;
+  font-weight: 500;
+  font-size: 0.8rem;
+  font-family: monospace;
 }
 
-/* ----- АДАПТИВНОСТЬ (планшеты, мобильные) ----- */
 @media (max-width: 700px) {
-  .controls-row {
-    gap: 12px;
-    padding: 15px 20px;
-  }
-  
-  .btn {
-    min-width: 130px;
-    padding: 10px 18px;
-    font-size: 1.1rem;
-  }
-  
-  .interval-control {
-    padding: 5px 12px;
-  }
-  
-  .time-input {
-    width: 70px;
-    padding: 6px 10px;
-    font-size: 0.95rem;
-  }
+  .controls-row { gap: 10px; padding: 12px 18px; }
+  .btn { min-width: 115px; padding: 8px 16px; font-size: 0.9rem; }
+  .mode-btn { padding: 4px 14px; font-size: 0.8rem; }
+  .time-input { width: 65px; }
 }
 
 @media (max-width: 600px) {
-  body {
-    padding: 15px;
-  }
-  
-  .rank-labels {
-    width: 25px;
-    font-size: 16px;
-  }
-  
-  .file-labels {
-    padding-left: 25px;
-    font-size: 16px;
-  }
-  
-  .controls-row {
-    flex-wrap: wrap;
-    gap: 12px;
-    border-radius: 35px;
-  }
-  
-  .btn {
-    width: auto;
-    min-width: 125px;
-    font-size: 1rem;
-    padding: 10px 16px;
-  }
-  
-  .interval-control {
-    margin-left: 0;
-  }
-  
-  .cell-coordinate {
-    font-size: clamp(1.2rem, 7vw, 3rem);
-  }
+  .rank-labels { width: 26px; font-size: 14px; }
+  .file-labels { padding-left: 26px; font-size: 14px; }
+  .btn { min-width: 105px; font-size: 0.85rem; }
 }
 
 @media (max-width: 480px) {
-  .controls-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-    border-radius: 30px;
-  }
-  
-  .btn {
-    width: 100%;
-    text-align: center;
-  }
-  
-  .interval-control {
-    justify-content: center;
-    width: fit-content;
-    margin: 0 auto;
-  }
-  
-  .rank-labels {
-    width: 22px;
-    font-size: 14px;
-  }
-  
-  .file-labels {
-    padding-left: 22px;
-    font-size: 14px;
-  }
+  .controls-row { flex-direction: column; align-items: stretch; border-radius: 28px; }
+  .btn { width: 100%; text-align: center; }
+  .mode-selector { justify-content: center; width: 100%; }
+  .interval-control { justify-content: center; width: fit-content; margin: 0 auto; }
+  .rank-labels { width: 24px; font-size: 13px; }
+  .file-labels { padding-left: 24px; font-size: 13px; }
 }
