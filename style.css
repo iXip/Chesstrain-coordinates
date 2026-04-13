@@ -1,334 +1,386 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+(function(){
+  "use strict";
 
-body {
-  background: #1a1c20;
-  font-family: 'Segoe UI', 'Roboto', 'Inter', system-ui, sans-serif;
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 0;
-  padding: 20px;
-}
+  const BOARD_SIZE = 8;
+  const TOTAL_CELLS = 64;
+  const DEFAULT_INTERVAL = 1;
 
-.app {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  max-width: 800px;
-  width: 100%;
-}
+  const boardEl = document.getElementById('chessBoard');
+  const nextBtn = document.getElementById('nextBtn');
+  const rotateBtn = document.getElementById('rotateBtn');
+  const startStopBtn = document.getElementById('startStopBtn');
+  const intervalInput = document.getElementById('intervalInput');
+  const rankLabels = document.getElementById('rankLabels');
+  const fileLabels = document.getElementById('fileLabels');
+  const modeRandomBtn = document.getElementById('modeRandomBtn');
+  const modeKnightBtn = document.getElementById('modeKnightBtn');
 
-.board-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-}
+  let cells = [];
+  let currentActiveIndex = -1;
+  let autoTimer = null;
+  let isRotated = false;
+  let currentInterval = DEFAULT_INTERVAL;
+  let isAutoRunning = false;
+  let currentMode = 'random';
 
-.board-row-container {
-  display: flex;
-  width: 100%;
-}
+  const KNIGHT_MOVES = [
+    [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+    [1, -2], [1, 2], [2, -1], [2, 1]
+  ];
 
-.rank-labels {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  align-items: center;
-  width: 32px;
-  flex-shrink: 0;
-  color: #9aa0a8;
-  font-weight: 500;
-  font-size: 16px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  user-select: none;
-}
+  let currentMoveHighlights = [];
+  
+  // Для режима коня: глобальный счётчик посещений каждой клетки
+  let visitCount = new Array(TOTAL_CELLS).fill(0);
+  
+  // История последних ходов (для мягкого избегания)
+  let recentMoves = [];
+  const RECENT_LIMIT = 3;
 
-.rank-labels span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 12.5%;
-  width: 100%;
-}
+  function indexToAlgebraic(index) {
+    const fileIndex = index % 8;
+    const rankIndex = Math.floor(index / 8);
+    const fileLetter = String.fromCharCode(97 + fileIndex);
+    const rankNumber = 8 - rankIndex;
+    return fileLetter.toUpperCase() + rankNumber;
+  }
 
-.chess-board {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
-  flex: 1;
-  aspect-ratio: 1 / 1;
-  border: 2px solid #2d2f36;
-  border-radius: 6px;
-  overflow: hidden;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-  transition: transform 0.3s ease;
-}
+  function getRowCol(index) {
+    return { row: Math.floor(index / 8), col: index % 8 };
+  }
 
-.chess-board.rotated {
-  transform: rotate(180deg);
-}
+  function indexFromRowCol(row, col) {
+    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return -1;
+    return row * BOARD_SIZE + col;
+  }
 
-.cell {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+  // Получить все возможные ходы коня из позиции
+  function getKnightMovesFromIndex(index) {
+    const { row, col } = getRowCol(index);
+    const moves = [];
+    for (const [dr, dc] of KNIGHT_MOVES) {
+      const newRow = row + dr;
+      const newCol = col + dc;
+      const newIndex = indexFromRowCol(newRow, newCol);
+      if (newIndex !== -1) {
+        moves.push(newIndex);
+      }
+    }
+    return moves;
+  }
 
-.cell.light {
-  background-color: #f0d9b5;
-}
+  // Подсчитать, сколько обратных ходов есть у каждой клетки (для оценки "закрытости")
+  function getMoveAccessibility(moveIndex) {
+    const nextMoves = getKnightMovesFromIndex(moveIndex);
+    return nextMoves.length;
+  }
 
-.cell.dark {
-  background-color: #b58863;
-}
+  // Умный выбор хода для коня
+  function getSmartKnightMove() {
+    if (currentActiveIndex === -1) {
+      const centerWeights = [];
+      for (let i = 0; i < TOTAL_CELLS; i++) {
+        const { row, col } = getRowCol(i);
+        const distToCenter = Math.abs(row - 3.5) + Math.abs(col - 3.5);
+        const weight = 10 - distToCenter;
+        for (let w = 0; w < Math.max(1, weight); w++) centerWeights.push(i);
+      }
+      const randomStart = centerWeights[Math.floor(Math.random() * centerWeights.length)];
+      return randomStart;
+    }
+    
+    const possibleMoves = getKnightMovesFromIndex(currentActiveIndex);
+    if (possibleMoves.length === 0) return Math.floor(Math.random() * TOTAL_CELLS);
+    
+    const scoredMoves = possibleMoves.map(move => {
+      const visitScore = Math.max(0, 10 - visitCount[move]);
+      const accessibility = getMoveAccessibility(move);
+      const accessibilityScore = Math.max(0, 8 - accessibility);
+      
+      let recentPenalty = 0;
+      if (recentMoves.includes(move)) {
+        const recencyIndex = recentMoves.indexOf(move);
+        recentPenalty = (RECENT_LIMIT - recencyIndex) * 3;
+      }
+      
+      const { row, col } = getRowCol(move);
+      const distToCenter = Math.abs(row - 3.5) + Math.abs(col - 3.5);
+      const centerBonus = Math.max(0, 6 - distToCenter);
+      
+      const totalScore = visitScore + accessibilityScore + centerBonus - recentPenalty;
+      
+      return { index: move, score: totalScore };
+    });
+    
+    scoredMoves.sort((a, b) => b.score - a.score);
+    
+    const topCount = Math.min(3, scoredMoves.length);
+    const topMoves = scoredMoves.slice(0, topCount);
+    
+    const randomTopIndex = Math.floor(Math.random() * topMoves.length);
+    const selectedMove = topMoves[randomTopIndex].index;
+    
+    return selectedMove;
+  }
 
-.cell.highlight::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(200, 60, 60, 0.82);
-  box-shadow: inset 0 0 0 3px rgba(255, 210, 80, 0.95);
-  pointer-events: none;
-  z-index: 1;
-}
+  function getNextCellIndex() {
+    if (currentMode === 'knight') {
+      return getSmartKnightMove();
+    } else {
+      return Math.floor(Math.random() * TOTAL_CELLS);
+    }
+  }
 
-.cell.knight-move-highlight::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(70, 130, 200, 0.55);
-  box-shadow: inset 0 0 0 2px rgba(100, 200, 255, 0.9);
-  pointer-events: none;
-  z-index: 1;
-}
+  function clearKnightHighlights() {
+    currentMoveHighlights.forEach(idx => {
+      if (cells[idx]) cells[idx].classList.remove('knight-move-highlight');
+    });
+    currentMoveHighlights = [];
+  }
 
-.cell-coordinate {
-  position: relative;
-  z-index: 5;
-  color: white;
-  font-size: clamp(1.5rem, 8vw, 4rem);
-  font-weight: 800;
-  text-shadow: 2px 2px 6px #000000;
-  letter-spacing: 1px;
-  font-family: 'Segoe UI', 'Arial Black', sans-serif;
-  pointer-events: none;
-  user-select: none;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
+  function highlightKnightMoves(fromIndex) {
+    if (currentMode !== 'knight') return;
+    clearKnightHighlights();
+    if (fromIndex === -1) return;
+    
+    const moves = getKnightMovesFromIndex(fromIndex);
+    for (const moveIdx of moves) {
+      if (cells[moveIdx]) {
+        cells[moveIdx].classList.add('knight-move-highlight');
+        currentMoveHighlights.push(moveIdx);
+      }
+    }
+  }
 
-.chess-board.rotated .cell-coordinate {
-  transform: rotate(180deg);
-}
+  function highlightCell(index) {
+    if (index < 0 || index >= TOTAL_CELLS) return;
+    
+    if (currentActiveIndex !== -1 && cells[currentActiveIndex]) {
+      cells[currentActiveIndex].classList.remove('highlight');
+    }
+    
+    cells[index].classList.add('highlight');
+    
+    if (currentMode === 'knight') {
+      visitCount[index]++;
+      recentMoves.unshift(index);
+      if (recentMoves.length > RECENT_LIMIT) {
+        recentMoves.pop();
+      }
+    }
+    
+    currentActiveIndex = index;
+    
+    if (currentMode === 'knight') {
+      highlightKnightMoves(index);
+    } else {
+      clearKnightHighlights();
+    }
+  }
 
-.cell.highlight .cell-coordinate {
-  opacity: 1;
-}
+  function pickNextCell() {
+    const nextIndex = getNextCellIndex();
+    highlightCell(nextIndex);
+  }
 
-.file-labels {
-  display: flex;
-  justify-content: space-around;
-  width: 100%;
-  padding-left: 32px;
-  margin-top: 8px;
-  color: #9aa0a8;
-  font-weight: 500;
-  font-size: 16px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  user-select: none;
-  text-transform: lowercase;
-}
+  function resetKnightStats() {
+    visitCount.fill(0);
+    recentMoves = [];
+  }
 
-.file-labels span {
-  flex: 1;
-  text-align: center;
-}
+  function switchMode(mode) {
+    currentMode = mode;
+    
+    if (mode === 'random') {
+      modeRandomBtn.classList.add('active');
+      modeKnightBtn.classList.remove('active');
+      clearKnightHighlights();
+      resetKnightStats();
+    } else {
+      modeKnightBtn.classList.add('active');
+      modeRandomBtn.classList.remove('active');
+      resetKnightStats();
+      if (currentActiveIndex !== -1) {
+        highlightKnightMoves(currentActiveIndex);
+        visitCount[currentActiveIndex]++;
+        recentMoves = [currentActiveIndex];
+      }
+    }
+    
+    if (isAutoRunning) {
+      restartAutoMode();
+    }
+  }
 
-.controls {
-  margin-top: 28px;
-  width: 100%;
-}
+  function startAutoMode() {
+    if (autoTimer) clearInterval(autoTimer);
+    const intervalMs = currentInterval * 1000;
+    autoTimer = setInterval(() => pickNextCell(), intervalMs);
+    isAutoRunning = true;
+    updateStartStopButton();
+  }
 
-.controls-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: #23262e;
-  padding: 12px 24px;
-  border-radius: 48px;
-  border: 1px solid #3a3e48;
-  width: 100%;
-}
+  function stopAutoMode() {
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+    }
+    isAutoRunning = false;
+    updateStartStopButton();
+  }
 
-.btn {
-  background: #2d3038;
-  border: 1px solid #444851;
-  border-radius: 32px;
-  padding: 10px 22px;
-  font-size: 1rem;
-  font-weight: 500;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  color: #e8eaed;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  letter-spacing: 0.3px;
-  min-width: 130px;
-}
+  function restartAutoMode() {
+    if (isAutoRunning) {
+      startAutoMode();
+    }
+  }
 
-.btn:hover {
-  background: #3a3e48;
-  border-color: #5f6570;
-  transform: translateY(-1px);
-}
+  function updateStartStopButton() {
+    if (isAutoRunning) {
+      startStopBtn.textContent = '⏹ Стоп';
+      startStopBtn.classList.add('running');
+    } else {
+      startStopBtn.textContent = '▶ Старт';
+      startStopBtn.classList.remove('running');
+    }
+  }
 
-.btn:active {
-  transform: translateY(1px);
-  background: #24272e;
-}
+  function toggleAutoMode() {
+    if (isAutoRunning) {
+      stopAutoMode();
+    } else {
+      startAutoMode();
+    }
+  }
 
-.btn.rotate-btn {
-  background: #262932;
-  border-color: #4a4e5a;
-}
+  function toggleRotation() {
+    isRotated = !isRotated;
+    
+    if (isRotated) {
+      rankLabels.innerHTML = '';
+      for (let i = 1; i <= 8; i++) {
+        const span = document.createElement('span');
+        span.textContent = i;
+        rankLabels.appendChild(span);
+      }
+      fileLabels.innerHTML = '';
+      const filesReversed = ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
+      filesReversed.forEach(file => {
+        const span = document.createElement('span');
+        span.textContent = file;
+        fileLabels.appendChild(span);
+      });
+    } else {
+      rankLabels.innerHTML = '';
+      for (let i = 8; i >= 1; i--) {
+        const span = document.createElement('span');
+        span.textContent = i;
+        rankLabels.appendChild(span);
+      }
+      fileLabels.innerHTML = '';
+      const filesNormal = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+      filesNormal.forEach(file => {
+        const span = document.createElement('span');
+        span.textContent = file;
+        fileLabels.appendChild(span);
+      });
+    }
+    
+    if (isRotated) {
+      boardEl.classList.add('rotated');
+    } else {
+      boardEl.classList.remove('rotated');
+    }
+  }
 
-.btn.rotate-btn:hover {
-  background: #333742;
-}
+  function updateIntervalFromInput() {
+    let value = parseFloat(intervalInput.value);
+    if (isNaN(value) || value < 0.5) value = 0.5;
+    if (value > 10) value = 10;
+    currentInterval = value;
+    intervalInput.value = value;
+    if (isAutoRunning) restartAutoMode();
+  }
 
-.btn.start-stop-btn {
-  background: #2a3a2e;
-  border-color: #4a6a4e;
-  color: #d4ecd6;
-}
+  function buildBoard() {
+    boardEl.innerHTML = '';
+    cells = [];
+    
+    for (let row = 0; row < BOARD_SIZE; row++) {
+      for (let col = 0; col < BOARD_SIZE; col++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        
+        const isLight = (row + col) % 2 === 0;
+        cell.classList.add(isLight ? 'light' : 'dark');
+        
+        const index = row * BOARD_SIZE + col;
+        const coord = indexToAlgebraic(index);
+        
+        const coordSpan = document.createElement('span');
+        coordSpan.className = 'cell-coordinate';
+        coordSpan.textContent = coord;
+        cell.appendChild(coordSpan);
+        
+        cell.addEventListener('click', (function(idx) {
+          return function() {
+            highlightCell(idx);
+            if (currentMode === 'knight') {
+              highlightKnightMoves(idx);
+            }
+          };
+        })(index));
+        
+        boardEl.appendChild(cell);
+        cells.push(cell);
+      }
+    }
+  }
 
-.btn.start-stop-btn:hover {
-  background: #354a3a;
-}
-
-.btn.start-stop-btn.running {
-  background: #4a2e2e;
-  border-color: #8a5a5a;
-  color: #ffd8d8;
-}
-
-.btn.start-stop-btn.running:hover {
-  background: #5a3a3a;
-}
-
-.mode-selector {
-  display: flex;
-  gap: 8px;
-  background: #1e2026;
-  padding: 4px 12px;
-  border-radius: 40px;
-  border: 1px solid #3e424c;
-}
-
-.mode-btn {
-  background: transparent;
-  border: none;
-  padding: 6px 18px;
-  border-radius: 32px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: #b0b4bc;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: monospace;
-}
-
-.mode-btn.active {
-  background: #3a3e48;
-  color: #ffffff;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
-}
-
-.mode-btn:hover:not(.active) {
-  background: #2d3038;
-  color: #e0e4e9;
-}
-
-.interval-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #1e2026;
-  padding: 5px 14px;
-  border-radius: 32px;
-  border: 1px solid #3e424c;
-}
-
-.interval-label {
-  color: #bcc0c8;
-  font-size: 0.85rem;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  font-family: monospace;
-}
-
-.time-input {
-  width: 70px;
-  padding: 6px 10px;
-  border-radius: 24px;
-  border: 1px solid #4a4e58;
-  background: #131518;
-  color: #e0e4e9;
-  font-size: 0.9rem;
-  font-weight: 500;
-  text-align: center;
-  outline: none;
-  font-family: monospace;
-}
-
-.time-input:focus {
-  border-color: #7a808c;
-  background: #0f1115;
-}
-
-.time-unit {
-  color: #8a909c;
-  font-weight: 500;
-  font-size: 0.8rem;
-  font-family: monospace;
-}
-
-@media (max-width: 700px) {
-  .controls-row { gap: 10px; padding: 12px 18px; }
-  .btn { min-width: 115px; padding: 8px 16px; font-size: 0.9rem; }
-  .mode-btn { padding: 4px 14px; font-size: 0.8rem; }
-  .time-input { width: 65px; }
-}
-
-@media (max-width: 600px) {
-  .rank-labels { width: 26px; font-size: 14px; }
-  .file-labels { padding-left: 26px; font-size: 14px; }
-  .btn { min-width: 105px; font-size: 0.85rem; }
-}
-
-@media (max-width: 480px) {
-  .controls-row { flex-direction: column; align-items: stretch; border-radius: 28px; }
-  .btn { width: 100%; text-align: center; }
-  .mode-selector { justify-content: center; width: 100%; }
-  .interval-control { justify-content: center; width: fit-content; margin: 0 auto; }
-  .rank-labels { width: 24px; font-size: 13px; }
-  .file-labels { padding-left: 24px; font-size: 13px; }
-}
+  function initApp() {
+    buildBoard();
+    
+    for (let i = 8; i >= 1; i--) {
+      const span = document.createElement('span');
+      span.textContent = i;
+      rankLabels.appendChild(span);
+    }
+    ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].forEach(file => {
+      const span = document.createElement('span');
+      span.textContent = file;
+      fileLabels.appendChild(span);
+    });
+    
+    nextBtn.addEventListener('click', () => pickNextCell());
+    rotateBtn.addEventListener('click', toggleRotation);
+    startStopBtn.addEventListener('click', toggleAutoMode);
+    modeRandomBtn.addEventListener('click', () => switchMode('random'));
+    modeKnightBtn.addEventListener('click', () => switchMode('knight'));
+    
+    intervalInput.addEventListener('change', updateIntervalFromInput);
+    intervalInput.addEventListener('input', (e) => {
+      let val = parseFloat(e.target.value);
+      if (!isNaN(val)) {
+        if (val < 0.5) val = 0.5;
+        if (val > 10) val = 10;
+        currentInterval = val;
+      }
+    });
+    
+    intervalInput.value = DEFAULT_INTERVAL;
+    currentInterval = DEFAULT_INTERVAL;
+    isAutoRunning = false;
+    updateStartStopButton();
+    
+    currentMode = 'random';
+    modeRandomBtn.classList.add('active');
+    modeKnightBtn.classList.remove('active');
+    
+    setTimeout(() => {
+      const startIdx = Math.floor(Math.random() * TOTAL_CELLS);
+      highlightCell(startIdx);
+    }, 50);
+  }
+  
+  initApp();
+})();
