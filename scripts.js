@@ -1,4 +1,4 @@
-(function () {
+(function(){
   "use strict";
 
   const BOARD_SIZE = 8;
@@ -29,11 +29,22 @@
   ];
 
   let currentMoveHighlights = [];
-
+  
   // Система отслеживания посещений
   let visitCount = new Array(TOTAL_CELLS).fill(0);
   let recentMoves = [];
-  const RECENT_LIMIT = 8; // Помним последние 8 ходов
+  const RECENT_LIMIT = 8;
+
+  // Карта "привлекательности" клеток: центр привлекательнее краёв
+  function getCellAttractiveness(index) {
+    const { row, col } = getRowCol(index);
+    // Расстояние до центра (3.5, 3.5)
+    const distToCenter = Math.sqrt(Math.pow(row - 3.5, 2) + Math.pow(col - 3.5, 2));
+    // Максимальное расстояние до центра = sqrt(3.5² + 3.5²) ≈ 4.95
+    const maxDist = 4.95;
+    // Инвертируем: чем ближе к центру, тем привлекательнее (от 0 до 1)
+    return 1 - (distToCenter / maxDist);
+  }
 
   function indexToAlgebraic(index) {
     const fileIndex = index % 8;
@@ -66,116 +77,78 @@
     return moves;
   }
 
-  function getMoveAccessibility(moveIndex) {
-    const nextMoves = getKnightMovesFromIndex(moveIndex);
-    return nextMoves.length;
-  }
-
-  // Улучшенный алгоритм коня без телепортации
+  // Полностью переработанный алгоритм коня
   function getSmartKnightMove() {
-    // Начальная позиция: выбираем центр доски
+    // Начальная позиция: ТОЛЬКО центр доски
     if (currentActiveIndex === -1) {
-      const centerCells = [];
-      for (let i = 0; i < TOTAL_CELLS; i++) {
-        const { row, col } = getRowCol(i);
-        const distToCenter = Math.abs(row - 3.5) + Math.abs(col - 3.5);
-        if (distToCenter <= 2) { // Близко к центру
-          const weight = 6 - distToCenter;
-          for (let w = 0; w < Math.max(1, weight); w++) {
-            centerCells.push(i);
-          }
-        }
-      }
+      const centerCells = [27, 28, 35, 36]; // e4, e5, d4, d5 - самый центр
       return centerCells[Math.floor(Math.random() * centerCells.length)];
     }
-
+    
     const possibleMoves = getKnightMovesFromIndex(currentActiveIndex);
-    if (possibleMoves.length === 0) {
-      // Если конь застрял (не должно случиться), ищем ближайшую клетку
-      let minDist = Infinity;
-      let fallbackIndex = 0;
-      for (let i = 0; i < TOTAL_CELLS; i++) {
-        if (visitCount[i] < minDist) {
-          minDist = visitCount[i];
-          fallbackIndex = i;
-        }
-      }
-      return fallbackIndex;
+    if (possibleMoves.length === 0) return Math.floor(Math.random() * TOTAL_CELLS);
+    
+    // Разделяем ходы на непосещенные и посещенные
+    const unvisited = possibleMoves.filter(m => visitCount[m] === 0);
+    const visited = possibleMoves.filter(m => visitCount[m] > 0);
+    
+    // Если есть непосещенные клетки - ВСЕГДА идём туда
+    if (unvisited.length > 0) {
+      // Среди непосещенных выбираем самые привлекательные (центр доски)
+      const scoredUnvisited = unvisited.map(move => {
+        const attractiveness = getCellAttractiveness(move);
+        
+        // Бонус за разнообразие направления
+        const currentPos = getRowCol(currentActiveIndex);
+        const newPos = getRowCol(move);
+        let diversityBonus = 0;
+        if (Math.abs(newPos.row - currentPos.row) === 2) diversityBonus += 2;
+        if (Math.abs(newPos.col - currentPos.col) === 2) diversityBonus += 2;
+        
+        return { index: move, score: attractiveness * 10 + diversityBonus };
+      });
+      
+      scoredUnvisited.sort((a, b) => b.score - a.score);
+      
+      // Выбираем из лучших непосещенных
+      const topCount = Math.min(2, scoredUnvisited.length);
+      return scoredUnvisited[Math.floor(Math.random() * topCount)].index;
     }
-
-    // Система оценки ходов с фокусом на равномерное покрытие
-    const scoredMoves = possibleMoves.map(move => {
-      // 1. Главный фактор: непосещенные клетки имеют огромный приоритет
+    
+    // Если все соседние клетки посещены, выбираем наименее посещенную
+    const scoredVisited = visited.map(move => {
       const visits = visitCount[move];
-      let visitScore;
-      if (visits === 0) {
-        visitScore = 1000; // Огромный бонус за непосещенные клетки
-      } else if (visits === 1) {
-        visitScore = 500;
-      } else if (visits === 2) {
-        visitScore = 100;
-      } else {
-        visitScore = Math.max(0, 20 - visits * 3);
-      }
-
-      // 2. Правило Варнсдорфа: предпочитаем клетки с меньшим количеством выходов
-      const accessibility = getMoveAccessibility(move);
-      const accessibilityScore = (8 - accessibility) * 15;
-
-      // 3. Штраф за недавние посещения (сильнее, чем раньше)
+      const attractiveness = getCellAttractiveness(move);
+      
+      // Сильный штраф за недавние посещения
       let recentPenalty = 0;
       const recentIndex = recentMoves.indexOf(move);
       if (recentIndex !== -1) {
-        recentPenalty = (RECENT_LIMIT - recentIndex) * 8;
+        recentPenalty = (RECENT_LIMIT - recentIndex) * 10;
       }
-
-      // 4. Бонус за разнообразие: стараемся менять ряды и столбцы
-      const currentPos = getRowCol(currentActiveIndex);
-      const newPos = getRowCol(move);
-      let diversityBonus = 0;
-      if (newPos.row !== currentPos.row) diversityBonus += 3;
-      if (newPos.col !== currentPos.col) diversityBonus += 3;
-      if (Math.abs(newPos.row - currentPos.row) === 2) diversityBonus += 2; // Предпочитаем дальние прыжки
-
-      // 5. Небольшой бонус за центр доски (для лучшего покрытия)
-      const distToCenter = Math.abs(newPos.row - 3.5) + Math.abs(newPos.col - 3.5);
-      const centerBonus = Math.max(0, 4 - distToCenter) * 2;
-
-      const totalScore = visitScore + accessibilityScore + diversityBonus + centerBonus - recentPenalty;
-
-      return { index: move, score: totalScore };
+      
+      // Основной приоритет - менее посещенные клетки
+      const visitScore = Math.max(0, 50 - visits * 5);
+      
+      return { index: move, score: visitScore + attractiveness * 5 - recentPenalty };
     });
-
-    // Сортируем по убыванию score
-    scoredMoves.sort((a, b) => b.score - a.score);
-
-    // Выбираем из лучших ходов, но с элементами случайности
-    const topCount = Math.min(3, scoredMoves.length);
-
-    // Если есть непосещенные клетки, выбираем только из них
-    const unvisitedMoves = scoredMoves.filter(m => visitCount[m.index] === 0);
-    if (unvisitedMoves.length > 0) {
-      const selected = unvisitedMoves[Math.floor(Math.random() * Math.min(2, unvisitedMoves.length))];
-      return selected.index;
-    }
-
-    // Если все посещены хотя бы раз, выбираем из топ-3
-    const topMoves = scoredMoves.slice(0, topCount);
-    const selectedMove = topMoves[Math.floor(Math.random() * topMoves.length)].index;
-
-    return selectedMove;
+    
+    scoredVisited.sort((a, b) => b.score - a.score);
+    
+    // Выбираем из топ-3
+    const topCount = Math.min(3, scoredVisited.length);
+    return scoredVisited[Math.floor(Math.random() * topCount)].index;
   }
 
   function getNextCellIndex() {
     if (currentMode === 'knight') {
       return getSmartKnightMove();
     } else {
-      // Для случайного режима тоже стараемся избегать повторов
-      if (Math.random() < 0.4) {
-        // 40% шанс выбрать менее посещенную клетку
+      // Случайный режим с предпочтением менее посещенных
+      if (Math.random() < 0.5) {
         const weightedCells = [];
         for (let i = 0; i < TOTAL_CELLS; i++) {
-          const weight = Math.max(1, 15 - visitCount[i]);
+          const weight = Math.max(1, 20 - visitCount[i]);
           for (let w = 0; w < weight; w++) {
             weightedCells.push(i);
           }
@@ -197,7 +170,7 @@
     if (currentMode !== 'knight') return;
     clearKnightHighlights();
     if (fromIndex === -1) return;
-
+    
     const moves = getKnightMovesFromIndex(fromIndex);
     for (const moveIdx of moves) {
       if (cells[moveIdx]) {
@@ -209,22 +182,21 @@
 
   function highlightCell(index) {
     if (index < 0 || index >= TOTAL_CELLS) return;
-
+    
     if (currentActiveIndex !== -1 && cells[currentActiveIndex]) {
       cells[currentActiveIndex].classList.remove('highlight');
     }
-
+    
     cells[index].classList.add('highlight');
-
-    // Обновляем статистику
+    
     visitCount[index]++;
     recentMoves.unshift(index);
     if (recentMoves.length > RECENT_LIMIT) {
       recentMoves.pop();
     }
-
+    
     currentActiveIndex = index;
-
+    
     if (currentMode === 'knight') {
       highlightKnightMoves(index);
     } else {
@@ -244,7 +216,7 @@
 
   function switchMode(mode) {
     currentMode = mode;
-
+    
     if (mode === 'random') {
       modeRandomBtn.classList.add('active');
       modeKnightBtn.classList.remove('active');
@@ -260,7 +232,7 @@
         recentMoves = [currentActiveIndex];
       }
     }
-
+    
     if (isAutoRunning) {
       restartAutoMode();
     }
@@ -309,7 +281,7 @@
 
   function toggleRotation() {
     isRotated = !isRotated;
-
+    
     if (isRotated) {
       rankLabels.innerHTML = '';
       for (let i = 1; i <= 8; i++) {
@@ -339,7 +311,7 @@
         fileLabels.appendChild(span);
       });
     }
-
+    
     if (isRotated) {
       boardEl.classList.add('rotated');
     } else {
@@ -359,32 +331,32 @@
   function buildBoard() {
     boardEl.innerHTML = '';
     cells = [];
-
+    
     for (let row = 0; row < BOARD_SIZE; row++) {
       for (let col = 0; col < BOARD_SIZE; col++) {
         const cell = document.createElement('div');
         cell.className = 'cell';
-
+        
         const isLight = (row + col) % 2 === 0;
         cell.classList.add(isLight ? 'light' : 'dark');
-
+        
         const index = row * BOARD_SIZE + col;
         const coord = indexToAlgebraic(index);
-
+        
         const coordSpan = document.createElement('span');
         coordSpan.className = 'cell-coordinate';
         coordSpan.textContent = coord;
         cell.appendChild(coordSpan);
-
-        cell.addEventListener('click', (function (idx) {
-          return function () {
+        
+        cell.addEventListener('click', (function(idx) {
+          return function() {
             highlightCell(idx);
             if (currentMode === 'knight') {
               highlightKnightMoves(idx);
             }
           };
         })(index));
-
+        
         boardEl.appendChild(cell);
         cells.push(cell);
       }
@@ -393,7 +365,7 @@
 
   function initApp() {
     buildBoard();
-
+    
     for (let i = 8; i >= 1; i--) {
       const span = document.createElement('span');
       span.textContent = i;
@@ -404,13 +376,13 @@
       span.textContent = file;
       fileLabels.appendChild(span);
     });
-
+    
     nextBtn.addEventListener('click', () => pickNextCell());
     rotateBtn.addEventListener('click', toggleRotation);
     startStopBtn.addEventListener('click', toggleAutoMode);
     modeRandomBtn.addEventListener('click', () => switchMode('random'));
     modeKnightBtn.addEventListener('click', () => switchMode('knight'));
-
+    
     intervalInput.addEventListener('change', updateIntervalFromInput);
     intervalInput.addEventListener('input', (e) => {
       let val = parseFloat(e.target.value);
@@ -420,21 +392,21 @@
         currentInterval = val;
       }
     });
-
+    
     intervalInput.value = DEFAULT_INTERVAL;
     currentInterval = DEFAULT_INTERVAL;
     isAutoRunning = false;
     updateStartStopButton();
-
+    
     currentMode = 'random';
     modeRandomBtn.classList.add('active');
     modeKnightBtn.classList.remove('active');
-
+    
     setTimeout(() => {
       const startIdx = Math.floor(Math.random() * TOTAL_CELLS);
       highlightCell(startIdx);
     }, 50);
   }
-
+  
   initApp();
 })();
