@@ -1,412 +1,376 @@
-(function(){
-  "use strict";
+(() => {
+  'use strict';
 
-  const BOARD_SIZE = 8;
-  const TOTAL_CELLS = 64;
-  const DEFAULT_INTERVAL = 1;
+  const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 
-  const boardEl = document.getElementById('chessBoard');
-  const nextBtn = document.getElementById('nextBtn');
-  const rotateBtn = document.getElementById('rotateBtn');
-  const startStopBtn = document.getElementById('startStopBtn');
-  const intervalInput = document.getElementById('intervalInput');
-  const rankLabels = document.getElementById('rankLabels');
-  const fileLabels = document.getElementById('fileLabels');
-  const modeRandomBtn = document.getElementById('modeRandomBtn');
-  const modeKnightBtn = document.getElementById('modeKnightBtn');
+  const boardEl       = document.getElementById('board');
+  const boardOverlay  = document.getElementById('boardOverlay');
+  const targetCard    = document.getElementById('targetCard');
+  const targetValue   = document.getElementById('targetValue');
+  const scoreCorrect  = document.getElementById('scoreCorrect');
+  const scoreWrong    = document.getElementById('scoreWrong');
+  const scoreStreak   = document.getElementById('scoreStreak');
+  const scoreBest     = document.getElementById('scoreBest');
+  const statsEl       = document.getElementById('stats');
+  const modeSelector  = document.getElementById('modeSelector');
+  const displayModes  = document.getElementById('displayModes');
+  const speedRow      = document.getElementById('speedRow');
+  const speedSlider   = document.getElementById('speedSlider');
+  const speedValue    = document.getElementById('speedValue');
+  const progressTrack = document.getElementById('progressTrack');
+  const progressFill  = document.getElementById('progressFill');
+  const stopBtn       = document.getElementById('stopBtn');
 
-  let cells = [];
-  let currentActiveIndex = -1;
+  const SLIDER_MIN = 500;
+  const SLIDER_MAX = 5000;
+
+  const state = {
+    orientation: 'white',
+    mode: 'training',      // 'training' | 'auto'
+    target: null,
+    correct: 0,
+    wrong: 0,
+    streak: 0,
+    best: 0,
+    locked: false,
+    sound: true,
+    speed: 2000,
+    displayMode: 'above',  // 'above' | 'center' | 'onboard'
+    autoRunning: true,
+  };
+
   let autoTimer = null;
-  let isRotated = false;
-  let currentInterval = DEFAULT_INTERVAL;
-  let isAutoRunning = false;
-  let currentMode = 'random';
+  let sessionToken = 0;
 
-  const KNIGHT_MOVES = [
-    [-2, -1], [-2, 1], [-1, -2], [-1, 2],
-    [1, -2], [1, 2], [2, -1], [2, 1]
-  ];
+  /* ---------- Звук ---------- */
+  let audioCtx = null;
+  function beep(freq, duration, type = 'sine') {
+    if (!state.sound) return;
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc  = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
 
-  let currentMoveHighlights = [];
-  
-  // Система отслеживания посещений
-  let visitCount = new Array(TOTAL_CELLS).fill(0);
-  let recentMoves = [];
-  const RECENT_LIMIT = 8;
+      const now = audioCtx.currentTime;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
-  // Карта "привлекательности" клеток: центр привлекательнее краёв
-  function getCellAttractiveness(index) {
-    const { row, col } = getRowCol(index);
-    // Расстояние до центра (3.5, 3.5)
-    const distToCenter = Math.sqrt(Math.pow(row - 3.5, 2) + Math.pow(col - 3.5, 2));
-    // Максимальное расстояние до центра = sqrt(3.5² + 3.5²) ≈ 4.95
-    const maxDist = 4.95;
-    // Инвертируем: чем ближе к центру, тем привлекательнее (от 0 до 1)
-    return 1 - (distToCenter / maxDist);
+      osc.start(now);
+      osc.stop(now + duration + 0.02);
+    } catch (e) {}
   }
 
-  function indexToAlgebraic(index) {
-    const fileIndex = index % 8;
-    const rankIndex = Math.floor(index / 8);
-    const fileLetter = String.fromCharCode(97 + fileIndex);
-    const rankNumber = 8 - rankIndex;
-    return fileLetter.toUpperCase() + rankNumber;
-  }
-
-  function getRowCol(index) {
-    return { row: Math.floor(index / 8), col: index % 8 };
-  }
-
-  function indexFromRowCol(row, col) {
-    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return -1;
-    return row * BOARD_SIZE + col;
-  }
-
-  function getKnightMovesFromIndex(index) {
-    const { row, col } = getRowCol(index);
-    const moves = [];
-    for (const [dr, dc] of KNIGHT_MOVES) {
-      const newRow = row + dr;
-      const newCol = col + dc;
-      const newIndex = indexFromRowCol(newRow, newCol);
-      if (newIndex !== -1) {
-        moves.push(newIndex);
-      }
-    }
-    return moves;
-  }
-
-  // Полностью переработанный алгоритм коня
-  function getSmartKnightMove() {
-    // Начальная позиция: ТОЛЬКО центр доски
-    if (currentActiveIndex === -1) {
-      const centerCells = [27, 28, 35, 36]; // e4, e5, d4, d5 - самый центр
-      return centerCells[Math.floor(Math.random() * centerCells.length)];
-    }
-    
-    const possibleMoves = getKnightMovesFromIndex(currentActiveIndex);
-    if (possibleMoves.length === 0) return Math.floor(Math.random() * TOTAL_CELLS);
-    
-    // Разделяем ходы на непосещенные и посещенные
-    const unvisited = possibleMoves.filter(m => visitCount[m] === 0);
-    const visited = possibleMoves.filter(m => visitCount[m] > 0);
-    
-    // Если есть непосещенные клетки - ВСЕГДА идём туда
-    if (unvisited.length > 0) {
-      // Среди непосещенных выбираем самые привлекательные (центр доски)
-      const scoredUnvisited = unvisited.map(move => {
-        const attractiveness = getCellAttractiveness(move);
-        
-        // Бонус за разнообразие направления
-        const currentPos = getRowCol(currentActiveIndex);
-        const newPos = getRowCol(move);
-        let diversityBonus = 0;
-        if (Math.abs(newPos.row - currentPos.row) === 2) diversityBonus += 2;
-        if (Math.abs(newPos.col - currentPos.col) === 2) diversityBonus += 2;
-        
-        return { index: move, score: attractiveness * 10 + diversityBonus };
-      });
-      
-      scoredUnvisited.sort((a, b) => b.score - a.score);
-      
-      // Выбираем из лучших непосещенных
-      const topCount = Math.min(2, scoredUnvisited.length);
-      return scoredUnvisited[Math.floor(Math.random() * topCount)].index;
-    }
-    
-    // Если все соседние клетки посещены, выбираем наименее посещенную
-    const scoredVisited = visited.map(move => {
-      const visits = visitCount[move];
-      const attractiveness = getCellAttractiveness(move);
-      
-      // Сильный штраф за недавние посещения
-      let recentPenalty = 0;
-      const recentIndex = recentMoves.indexOf(move);
-      if (recentIndex !== -1) {
-        recentPenalty = (RECENT_LIMIT - recentIndex) * 10;
-      }
-      
-      // Основной приоритет - менее посещенные клетки
-      const visitScore = Math.max(0, 50 - visits * 5);
-      
-      return { index: move, score: visitScore + attractiveness * 5 - recentPenalty };
-    });
-    
-    scoredVisited.sort((a, b) => b.score - a.score);
-    
-    // Выбираем из топ-3
-    const topCount = Math.min(3, scoredVisited.length);
-    return scoredVisited[Math.floor(Math.random() * topCount)].index;
-  }
-
-  function getNextCellIndex() {
-    if (currentMode === 'knight') {
-      return getSmartKnightMove();
-    } else {
-      // Случайный режим с предпочтением менее посещенных
-      if (Math.random() < 0.5) {
-        const weightedCells = [];
-        for (let i = 0; i < TOTAL_CELLS; i++) {
-          const weight = Math.max(1, 20 - visitCount[i]);
-          for (let w = 0; w < weight; w++) {
-            weightedCells.push(i);
-          }
-        }
-        return weightedCells[Math.floor(Math.random() * weightedCells.length)];
-      }
-      return Math.floor(Math.random() * TOTAL_CELLS);
-    }
-  }
-
-  function clearKnightHighlights() {
-    currentMoveHighlights.forEach(idx => {
-      if (cells[idx]) cells[idx].classList.remove('knight-move-highlight');
-    });
-    currentMoveHighlights = [];
-  }
-
-  function highlightKnightMoves(fromIndex) {
-    if (currentMode !== 'knight') return;
-    clearKnightHighlights();
-    if (fromIndex === -1) return;
-    
-    const moves = getKnightMovesFromIndex(fromIndex);
-    for (const moveIdx of moves) {
-      if (cells[moveIdx]) {
-        cells[moveIdx].classList.add('knight-move-highlight');
-        currentMoveHighlights.push(moveIdx);
-      }
-    }
-  }
-
-  function highlightCell(index) {
-    if (index < 0 || index >= TOTAL_CELLS) return;
-    
-    if (currentActiveIndex !== -1 && cells[currentActiveIndex]) {
-      cells[currentActiveIndex].classList.remove('highlight');
-    }
-    
-    cells[index].classList.add('highlight');
-    
-    visitCount[index]++;
-    recentMoves.unshift(index);
-    if (recentMoves.length > RECENT_LIMIT) {
-      recentMoves.pop();
-    }
-    
-    currentActiveIndex = index;
-    
-    if (currentMode === 'knight') {
-      highlightKnightMoves(index);
-    } else {
-      clearKnightHighlights();
-    }
-  }
-
-  function pickNextCell() {
-    const nextIndex = getNextCellIndex();
-    highlightCell(nextIndex);
-  }
-
-  function resetKnightStats() {
-    visitCount.fill(0);
-    recentMoves = [];
-  }
-
-  function switchMode(mode) {
-    currentMode = mode;
-    
-    if (mode === 'random') {
-      modeRandomBtn.classList.add('active');
-      modeKnightBtn.classList.remove('active');
-      clearKnightHighlights();
-      resetKnightStats();
-    } else {
-      modeKnightBtn.classList.add('active');
-      modeRandomBtn.classList.remove('active');
-      resetKnightStats();
-      if (currentActiveIndex !== -1) {
-        highlightKnightMoves(currentActiveIndex);
-        visitCount[currentActiveIndex]++;
-        recentMoves = [currentActiveIndex];
-      }
-    }
-    
-    if (isAutoRunning) {
-      restartAutoMode();
-    }
-  }
-
-  function startAutoMode() {
-    if (autoTimer) clearInterval(autoTimer);
-    const intervalMs = currentInterval * 1000;
-    autoTimer = setInterval(() => pickNextCell(), intervalMs);
-    isAutoRunning = true;
-    updateStartStopButton();
-  }
-
-  function stopAutoMode() {
-    if (autoTimer) {
-      clearInterval(autoTimer);
-      autoTimer = null;
-    }
-    isAutoRunning = false;
-    updateStartStopButton();
-  }
-
-  function restartAutoMode() {
-    if (isAutoRunning) {
-      startAutoMode();
-    }
-  }
-
-  function updateStartStopButton() {
-    if (isAutoRunning) {
-      startStopBtn.textContent = '⏹ Стоп';
-      startStopBtn.classList.add('running');
-    } else {
-      startStopBtn.textContent = '▶ Старт';
-      startStopBtn.classList.remove('running');
-    }
-  }
-
-  function toggleAutoMode() {
-    if (isAutoRunning) {
-      stopAutoMode();
-    } else {
-      startAutoMode();
-    }
-  }
-
-  function toggleRotation() {
-    isRotated = !isRotated;
-    
-    if (isRotated) {
-      rankLabels.innerHTML = '';
-      for (let i = 1; i <= 8; i++) {
-        const span = document.createElement('span');
-        span.textContent = i;
-        rankLabels.appendChild(span);
-      }
-      fileLabels.innerHTML = '';
-      const filesReversed = ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
-      filesReversed.forEach(file => {
-        const span = document.createElement('span');
-        span.textContent = file;
-        fileLabels.appendChild(span);
-      });
-    } else {
-      rankLabels.innerHTML = '';
-      for (let i = 8; i >= 1; i--) {
-        const span = document.createElement('span');
-        span.textContent = i;
-        rankLabels.appendChild(span);
-      }
-      fileLabels.innerHTML = '';
-      const filesNormal = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-      filesNormal.forEach(file => {
-        const span = document.createElement('span');
-        span.textContent = file;
-        fileLabels.appendChild(span);
-      });
-    }
-    
-    if (isRotated) {
-      boardEl.classList.add('rotated');
-    } else {
-      boardEl.classList.remove('rotated');
-    }
-  }
-
-  function updateIntervalFromInput() {
-    let value = parseFloat(intervalInput.value);
-    if (isNaN(value) || value < 0.5) value = 0.5;
-    if (value > 10) value = 10;
-    currentInterval = value;
-    intervalInput.value = value;
-    if (isAutoRunning) restartAutoMode();
-  }
-
-  function buildBoard() {
+  /* ---------- Отрисовка доски ---------- */
+  function renderBoard() {
     boardEl.innerHTML = '';
-    cells = [];
-    
-    for (let row = 0; row < BOARD_SIZE; row++) {
-      for (let col = 0; col < BOARD_SIZE; col++) {
-        const cell = document.createElement('div');
-        cell.className = 'cell';
-        
-        const isLight = (row + col) % 2 === 0;
-        cell.classList.add(isLight ? 'light' : 'dark');
-        
-        const index = row * BOARD_SIZE + col;
-        const coord = indexToAlgebraic(index);
-        
-        const coordSpan = document.createElement('span');
-        coordSpan.className = 'cell-coordinate';
-        coordSpan.textContent = coord;
-        cell.appendChild(coordSpan);
-        
-        cell.addEventListener('click', (function(idx) {
-          return function() {
-            highlightCell(idx);
-            if (currentMode === 'knight') {
-              highlightKnightMoves(idx);
-            }
-          };
-        })(index));
-        
-        boardEl.appendChild(cell);
-        cells.push(cell);
+
+    const files = state.orientation === 'white' ? FILES : [...FILES].reverse();
+    const ranks = state.orientation === 'white'
+      ? [8, 7, 6, 5, 4, 3, 2, 1]
+      : [1, 2, 3, 4, 5, 6, 7, 8];
+
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const file = files[c];
+        const rank = ranks[r];
+
+        const sq = document.createElement('div');
+        sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
+        sq.dataset.square = file + rank;
+
+        if (c === 0) {
+          const l = document.createElement('span');
+          l.className = 'label rank-label';
+          l.textContent = rank;
+          sq.appendChild(l);
+        }
+        if (r === 7) {
+          const l = document.createElement('span');
+          l.className = 'label file-label';
+          l.textContent = file;
+          sq.appendChild(l);
+        }
+
+        sq.addEventListener('click', () => onSquareClick(sq));
+        boardEl.appendChild(sq);
       }
     }
   }
 
-  function initApp() {
-    buildBoard();
-    
-    for (let i = 8; i >= 1; i--) {
-      const span = document.createElement('span');
-      span.textContent = i;
-      rankLabels.appendChild(span);
+  /* ---------- Отображение координаты (вопрос) ---------- */
+  function refreshDisplay() {
+    boardEl.querySelectorAll('.target-marker').forEach(el => el.classList.remove('target-marker'));
+    boardOverlay.classList.remove('active');
+    boardOverlay.textContent = '';
+
+    if (!state.target) {
+      targetCard.style.display = '';
+      targetValue.textContent = '—';
+      return;
     }
-    ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].forEach(file => {
-      const span = document.createElement('span');
-      span.textContent = file;
-      fileLabels.appendChild(span);
-    });
-    
-    nextBtn.addEventListener('click', () => pickNextCell());
-    rotateBtn.addEventListener('click', toggleRotation);
-    startStopBtn.addEventListener('click', toggleAutoMode);
-    modeRandomBtn.addEventListener('click', () => switchMode('random'));
-    modeKnightBtn.addEventListener('click', () => switchMode('knight'));
-    
-    intervalInput.addEventListener('change', updateIntervalFromInput);
-    intervalInput.addEventListener('input', (e) => {
-      let val = parseFloat(e.target.value);
-      if (!isNaN(val)) {
-        if (val < 0.5) val = 0.5;
-        if (val > 10) val = 10;
-        currentInterval = val;
-      }
-    });
-    
-    intervalInput.value = DEFAULT_INTERVAL;
-    currentInterval = DEFAULT_INTERVAL;
-    isAutoRunning = false;
-    updateStartStopButton();
-    
-    currentMode = 'random';
-    modeRandomBtn.classList.add('active');
-    modeKnightBtn.classList.remove('active');
-    
-    setTimeout(() => {
-      const startIdx = Math.floor(Math.random() * TOTAL_CELLS);
-      highlightCell(startIdx);
-    }, 50);
+
+    if (state.displayMode === 'above' || state.displayMode === 'onboard') {
+      // Вопрос в карточке (в onboard тоже — на клетке координата появляется после ответа)
+      targetCard.style.display = '';
+      targetValue.textContent = state.target;
+      targetValue.classList.remove('pop');
+      void targetValue.offsetWidth;
+      targetValue.classList.add('pop');
+    } else if (state.displayMode === 'center') {
+      targetCard.style.display = 'none';
+      boardOverlay.textContent = state.target;
+      boardOverlay.classList.add('active');
+    }
   }
-  
-  initApp();
+
+  /* ---------- Автотаймер ---------- */
+  function startAutoTimer() {
+    clearAutoTimer();
+    if (state.mode !== 'auto' || state.locked || !state.autoRunning) {
+      progressTrack.classList.remove('active');
+      return;
+    }
+    progressTrack.classList.add('active');
+    progressFill.style.animationDuration = state.speed + 'ms';
+    progressFill.classList.remove('animating');
+    void progressFill.offsetWidth;
+    progressFill.classList.add('animating');
+    autoTimer = setTimeout(handleTimeout, state.speed);
+  }
+
+  function clearAutoTimer() {
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+    progressFill.classList.remove('animating');
+    progressFill.style.width = '0%';
+  }
+
+  function handleTimeout() {
+    autoTimer = null;
+    if (state.mode !== 'auto' || state.locked || !state.autoRunning || !state.target) return;
+
+    // Просрочка — не ошибка, просто показываем ответ
+    state.locked = true;
+    beep(160, 0.22, 'sawtooth');
+
+    const correctSq = boardEl.querySelector(`[data-square="${state.target}"]`);
+    if (correctSq) {
+      correctSq.classList.add('correct');
+      if (state.displayMode === 'onboard') correctSq.classList.add('target-marker');
+    }
+
+    const token = ++sessionToken;
+    setTimeout(() => {
+      if (token !== sessionToken) return;
+      if (correctSq) correctSq.classList.remove('correct', 'target-marker');
+      state.locked = false;
+      nextTarget();
+    }, 500);
+  }
+
+  /* ---------- Логика тренировки ---------- */
+  function nextTarget() {
+    let sq;
+    do {
+      const f = FILES[Math.floor(Math.random() * 8)];
+      const r = Math.floor(Math.random() * 8) + 1;
+      sq = f + r;
+    } while (sq === state.target);
+
+    state.target = sq;
+    refreshDisplay();
+    startAutoTimer();
+  }
+
+  function updateStats() {
+    scoreCorrect.textContent = state.correct;
+    scoreWrong.textContent   = state.wrong;
+    scoreStreak.textContent  = state.streak;
+    scoreBest.textContent    = state.best;
+  }
+
+  function onSquareClick(sq) {
+    if (state.locked || !state.target) return;
+
+    const square = sq.dataset.square;
+
+    /* Режим "на клетке": неверный клик — не раскрываем ответ, ждём правильный */
+    if (state.displayMode === 'onboard' && square !== state.target) {
+      if (!sq.classList.contains('wrong')) {
+        sq.classList.add('wrong');
+        setTimeout(() => sq.classList.remove('wrong'), 720);
+      }
+      beep(160, 0.22, 'sawtooth');
+
+      if (state.mode === 'training') {
+        state.wrong++;
+        state.streak = 0;
+        updateStats();
+      }
+      return;
+    }
+
+    /* Обычный флоу */
+    clearAutoTimer();
+    state.locked = true;
+    const token = ++sessionToken;
+
+    if (square === state.target) {
+      // ✅ Верно
+      sq.classList.add('correct');
+      if (state.displayMode === 'onboard') sq.classList.add('target-marker');
+      beep(880, 0.09, 'sine');
+      state.correct++;
+
+      if (state.mode === 'training') {
+        state.streak++;
+        if (state.streak > state.best) state.best = state.streak;
+      }
+      updateStats();
+
+      const flashMs = state.displayMode === 'onboard' ? 550 : 320;
+      setTimeout(() => {
+        if (token !== sessionToken) return;
+        sq.classList.remove('correct', 'target-marker');
+        state.locked = false;
+        nextTarget();
+      }, flashMs);
+    } else {
+      // ❌ Неверно (для above/center — раскрываем ответ и идём дальше)
+      sq.classList.add('wrong');
+      beep(160, 0.22, 'sawtooth');
+
+      if (state.mode === 'training') {
+        state.wrong++;
+        state.streak = 0;
+        updateStats();
+      }
+
+      const correctSq = boardEl.querySelector(`[data-square="${state.target}"]`);
+      if (correctSq) correctSq.classList.add('correct');
+
+      setTimeout(() => {
+        if (token !== sessionToken) return;
+        sq.classList.remove('wrong');
+        if (correctSq) correctSq.classList.remove('correct');
+        state.locked = false;
+        nextTarget();
+      }, 720);
+    }
+  }
+
+  /* ---------- Кнопка Стоп/Старт ---------- */
+  function updateStopBtn() {
+    if (state.autoRunning) {
+      stopBtn.textContent = '⏸ Стоп';
+      stopBtn.classList.remove('stopped');
+    } else {
+      stopBtn.textContent = '▶ Старт';
+      stopBtn.classList.add('stopped');
+    }
+  }
+
+  stopBtn.addEventListener('click', () => {
+    state.autoRunning = !state.autoRunning;
+    updateStopBtn();
+
+    if (state.autoRunning) {
+      if (!state.locked) startAutoTimer();
+    } else {
+      clearAutoTimer();
+      progressTrack.classList.remove('active');
+    }
+  });
+
+  /* ---------- Переключение режима ---------- */
+  function setMode(mode) {
+    state.mode = mode;
+
+    modeSelector.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+
+    statsEl.classList.toggle('auto-mode', mode === 'auto');
+    speedRow.style.display = mode === 'auto' ? '' : 'none';
+    stopBtn.style.display   = mode === 'auto' ? '' : 'none';
+
+    sessionToken++;
+    clearAutoTimer();
+    state.locked = false;
+    state.streak = 0;
+    state.autoRunning = true;
+    updateStopBtn();
+    updateStats();
+
+    nextTarget();
+  }
+
+  /* ---------- Ползунок скорости ---------- */
+  function updateSliderFill() {
+    const pct = ((state.speed - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100;
+    speedSlider.style.setProperty('--fill', pct + '%');
+  }
+
+  speedSlider.addEventListener('input', () => {
+    state.speed = parseInt(speedSlider.value, 10);
+    speedValue.textContent = (state.speed / 1000).toFixed(1) + 'с';
+    updateSliderFill();
+
+    if (state.mode === 'auto' && !state.locked && state.autoRunning) startAutoTimer();
+  });
+
+  /* ---------- Селекторы ---------- */
+  modeSelector.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.dataset.mode === state.mode) return;
+    setMode(btn.dataset.mode);
+  });
+
+  displayModes.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    state.displayMode = btn.dataset.mode;
+    displayModes.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    refreshDisplay();
+  });
+
+  /* ---------- Кнопки ---------- */
+  document.getElementById('flipBtn').addEventListener('click', () => {
+    if (state.locked) return;
+    state.orientation = state.orientation === 'white' ? 'black' : 'white';
+    renderBoard();
+    refreshDisplay();
+    startAutoTimer();
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    sessionToken++;
+    state.correct = 0;
+    state.wrong   = 0;
+    state.streak  = 0;
+    state.best    = 0;
+    state.locked  = false;
+    boardEl.querySelectorAll('.correct, .wrong, .target-marker').forEach(el =>
+      el.classList.remove('correct', 'wrong', 'target-marker')
+    );
+    updateStats();
+    clearAutoTimer();
+    nextTarget();
+  });
+
+  document.getElementById('soundBtn').addEventListener('click', (e) => {
+    state.sound = !state.sound;
+    e.currentTarget.textContent = state.sound ? '🔊' : '🔇';
+  });
+
+  /* ---------- Старт ---------- */
+  renderBoard();
+  updateStats();
+  updateSliderFill();
+  nextTarget();
 })();
