@@ -2,37 +2,73 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>♜ Тренажёр шахматных координат</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Тренажёр шахматных координат</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
 <div class="app">
-  <div class="board-wrapper">
-    <div class="board-row-container">
-      <div class="rank-labels" id="rankLabels"></div>
-      <div class="chess-board" id="chessBoard"></div>
+  <header>
+    <h1>♟ Тренажёр координат</h1>
+    <p class="subtitle">Найди названную клетку на доске</p>
+  </header>
+
+  <div class="segmented" id="modeSelector">
+    <button data-mode="training" class="active">🎯 Тренировка</button>
+    <button data-mode="auto">⏱ Авто</button>
+  </div>
+
+  <div class="target-card" id="targetCard">
+    <div class="target-label">Найди клетку</div>
+    <div class="target-value" id="targetValue">—</div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+    <div class="board-overlay" id="boardOverlay"></div>
+    <div class="progress-track" id="progressTrack">
+      <div class="progress-fill" id="progressFill"></div>
     </div>
-    <div class="file-labels" id="fileLabels"></div>
+  </div>
+
+  <div class="stats" id="stats">
+    <div class="stat good">
+      <div class="stat-value" id="scoreCorrect">0</div>
+      <div class="stat-label">Верно</div>
+    </div>
+    <div class="stat bad">
+      <div class="stat-value" id="scoreWrong">0</div>
+      <div class="stat-label">Ошибок</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="scoreStreak">0</div>
+      <div class="stat-label">Серия</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="scoreBest">0</div>
+      <div class="stat-label">Рекорд</div>
+    </div>
+  </div>
+
+  <div class="speed-row" id="speedRow" style="display:none;">
+    <span class="speed-label">Скорость</span>
+    <input type="range" class="speed-slider" id="speedSlider"
+           min="500" max="5000" step="100" value="2000">
+    <span class="speed-value" id="speedValue">2.0с</span>
+  </div>
+
+  <div class="segmented" id="displayModes">
+    <button data-mode="above" class="active">Над доской</button>
+    <button data-mode="center">В центре</button>
+    <button data-mode="onboard">На клетке</button>
   </div>
 
   <div class="controls">
-    <div class="controls-row">
-      <button class="btn" id="nextBtn">⟳ Следующая</button>
-      <button class="btn rotate-btn" id="rotateBtn">⟳ Повернуть</button>
-      <button class="btn start-stop-btn" id="startStopBtn">▶ Старт</button>
-
-      <div class="mode-selector">
-        <button class="mode-btn" data-mode="random" id="modeRandomBtn">🎲 Рандом</button>
-        <button class="mode-btn" data-mode="knight" id="modeKnightBtn">🐴 конь</button>
-      </div>
-
-      <div class="interval-control">
-        <span class="interval-label">⏱ интервал</span>
-        <input type="number" id="intervalInput" class="time-input" min="0.5" max="10" step="0.5" value="1">
-        <span class="time-unit">сек</span>
-      </div>
-    </div>
+    <button class="btn" id="resetBtn">↺ Сброс</button>
+    <button class="btn" id="flipBtn">⇅ Перевернуть</button>
+    <button class="btn stop-btn" id="stopBtn" style="display:none;">⏸ Стоп</button>
+    <button class="btn sound" id="soundBtn">🔊</button>
   </div>
 </div>
 
