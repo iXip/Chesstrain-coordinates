@@ -110,6 +110,8 @@ h1 {
   letter-spacing: 0.03em;
 }
 
+.target-value.small { font-size: 1.9rem; }
+
 .target-value.pop { animation: pop 0.22s ease-out; }
 @keyframes pop {
   0%   { transform: scale(0.85); opacity: 0.4; }
@@ -140,7 +142,7 @@ h1 {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  font-size: clamp(3rem, 15vw, 7rem);
+  font-size: clamp(2.4rem, 12vw, 6rem);
   font-weight: 800;
   color: rgba(255, 255, 255, 0.45);
   text-shadow: 0 6px 24px rgba(0, 0, 0, 0.65);
@@ -149,6 +151,9 @@ h1 {
   opacity: 0;
   transition: opacity 0.25s;
   z-index: 2;
+  text-align: center;
+  padding: 0 10px;
+  line-height: 1.05;
 }
 .board-overlay.active { opacity: 1; }
 
@@ -254,11 +259,7 @@ h1 {
   gap: 8px;
   transition: all 0.2s;
 }
-
-/* Авторежим: статистика полностью скрыта */
-.stats.auto-mode {
-  display: none;
-}
+.stats.auto-mode { display: none; }
 
 .stat {
   background: var(--panel);
@@ -267,14 +268,12 @@ h1 {
   padding: 9px 4px;
   text-align: center;
 }
-
 .stat-value {
   font-size: 1.35rem;
   font-weight: 700;
   color: var(--white);
   font-variant-numeric: tabular-nums;
 }
-
 .stat-label {
   font-size: 0.66rem;
   color: var(--text-dim);
@@ -282,7 +281,6 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-
 .stat.good .stat-value { color: var(--good); }
 .stat.bad  .stat-value { color: var(--bad); }
 
@@ -293,7 +291,6 @@ h1 {
   gap: 10px;
   padding: 4px 2px;
 }
-
 .speed-label {
   font-size: 0.72rem;
   color: var(--text-dim);
@@ -301,7 +298,6 @@ h1 {
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
-
 .speed-slider {
   flex: 1;
   -webkit-appearance: none;
@@ -330,9 +326,7 @@ h1 {
   box-shadow: 0 0 0 1px var(--green);
   transition: transform 0.1s;
 }
-.speed-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
+.speed-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .speed-slider::-moz-range-thumb {
   width: 16px;
   height: 16px;
@@ -347,7 +341,6 @@ h1 {
   border-radius: 2px;
   background: transparent;
 }
-
 .speed-value {
   min-width: 42px;
   text-align: right;
@@ -358,10 +351,7 @@ h1 {
 }
 
 /* Кнопки */
-.controls {
-  display: flex;
-  gap: 8px;
-}
+.controls { display: flex; gap: 8px; }
 
 .btn {
   flex: 1;
@@ -379,9 +369,7 @@ h1 {
 }
 .btn:hover { background: var(--panel-hover); border-color: var(--border-hover); }
 .btn:active { transform: translateY(1px); }
-.btn.sound { flex: 0 0 auto; padding: 12px 14px; }
 
-/* Кнопка Стоп в авторежиме (на паузе) */
 .btn.stop-btn.stopped {
   background: var(--warn);
   color: #fff;
@@ -392,10 +380,58 @@ h1 {
   border-color: var(--warn-hover);
 }
 
+/* Коробочка: кнопка звука + переключатель озвучки цвета */
+.sound-box {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.sound-box .btn.sound {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 12px;
+  flex: 0 0 auto;
+}
+.sound-box .btn.sound:hover { background: var(--panel-hover); }
+
+.sound-color-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.sound-color-toggle:hover { background: var(--panel-hover); }
+.sound-color-toggle input { display: none; }
+
+.color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--text-dim);
+  background: transparent;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.sound-color-toggle input:checked + .color-dot {
+  border-color: var(--green);
+  background: var(--green);
+  box-shadow: 0 0 0 2px rgba(98, 153, 36, 0.25);
+}
+
 /* Адаптив */
 @media (max-width: 400px) {
   .target-value { font-size: 2.4rem; }
+  .target-value.small { font-size: 1.5rem; }
   .btn { font-size: 0.78rem; padding: 11px 4px; }
   .segmented button { font-size: 0.74rem; padding: 9px 4px; }
   .speed-label { font-size: 0.66rem; }
+  .sound-box .btn.sound { padding: 11px 10px; }
 }
