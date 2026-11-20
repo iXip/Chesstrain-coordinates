@@ -11,7 +11,6 @@
 <div class="app">
   <header>
     <h1>♟ Тренажёр координат</h1>
-    <p class="subtitle">Найди названную клетку на доске</p>
   </header>
 
   <div class="segmented" id="modeSelector">
@@ -19,8 +18,13 @@
     <button data-mode="auto">⏱ Авто</button>
   </div>
 
+  <div class="segmented" id="taskSelector">
+    <button data-task="squares" class="active">⬜ Клетки</button>
+    <button data-task="diagonals">⟋ Диагонали</button>
+  </div>
+
   <div class="target-card" id="targetCard">
-    <div class="target-label">Найди клетку</div>
+    <div class="target-label" id="targetLabel">Найди клетку</div>
     <div class="target-value" id="targetValue">—</div>
   </div>
 
@@ -68,7 +72,13 @@
     <button class="btn" id="resetBtn">↺ Сброс</button>
     <button class="btn" id="flipBtn">⇅ Перевернуть</button>
     <button class="btn stop-btn" id="stopBtn" style="display:none;">⏸ Стоп</button>
-    <button class="btn sound" id="soundBtn">🔊</button>
+    <div class="sound-box">
+      <button class="btn sound" id="soundBtn" title="Звук вкл/выкл">🔇</button>
+      <label class="sound-color-toggle" title="Озвучивать цвет">
+        <input type="checkbox" id="speakColorToggle" checked>
+        <span class="color-dot"></span>
+      </label>
+    </div>
   </div>
 </div>
 
