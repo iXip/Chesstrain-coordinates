@@ -10,7 +10,6 @@
   --text-dim: #8b8987;
   --white: #ffffff;
   --green: #629924;
-  --green-hover: #6da82b;
   --good: #7ec850;
   --bad: #e05252;
   --warn: #d08b2a;
@@ -29,33 +28,35 @@ body {
   padding: 24px 16px 40px;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
-  -webkit-user-select: none;
 }
 
-.app {
+.layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
   width: 100%;
-  max-width: 520px;
+  max-width: 800px;
+}
+
+.side-panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 240px;
+  flex-shrink: 0;
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  max-width: 520px;
 }
 
 header { text-align: center; }
+h1 { font-size: 1.35rem; font-weight: 700; color: var(--white); letter-spacing: 0.02em; }
 
-h1 {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--white);
-  letter-spacing: 0.02em;
-}
-
-.subtitle {
-  font-size: 0.85rem;
-  color: var(--text-dim);
-  margin-top: 4px;
-}
-
-/* Сегментированный переключатель */
 .segmented {
   display: flex;
   background: var(--panel);
@@ -78,54 +79,35 @@ h1 {
   font-family: inherit;
   white-space: nowrap;
 }
-.segmented button.active {
-  background: var(--panel-hover);
-  color: var(--white);
-}
+.segmented button.active { background: var(--panel-hover); color: var(--white); }
 .segmented button:hover:not(.active) { color: var(--text); }
 
-/* Карточка с координатой */
 .target-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 14px 16px;
-  text-align: center;
+  padding: 20px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
 }
 
-.target-label {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-dim);
+.chess-piece {
+  font-family: "Segoe UI Symbol", "Apple Color Emoji", "Noto Sans Symbols", sans-serif;
+  font-size: 4rem;
+  line-height: 1;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.6), 0 0 2px rgba(0,0,0,0.8);
 }
+.chess-piece.w { color: #ffffff; }
+.chess-piece.b { color: #232323; }
 
-.target-value {
-  font-size: 3rem;
-  font-weight: 700;
-  color: var(--white);
-  line-height: 1.1;
-  margin-top: 2px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
-}
-
-.target-value.small { font-size: 1.9rem; }
-
-.target-value.pop { animation: pop 0.22s ease-out; }
-@keyframes pop {
-  0%   { transform: scale(0.85); opacity: 0.4; }
-  100% { transform: scale(1);    opacity: 1; }
-}
-
-/* Обёртка доски */
 .board-wrap {
   position: relative;
   border-radius: 6px;
   overflow: hidden;
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
 }
-
 .board {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -134,7 +116,6 @@ h1 {
   grid-template-rows: repeat(8, 1fr);
 }
 
-/* Оверлей координаты в центре доски */
 .board-overlay {
   position: absolute;
   inset: 0;
@@ -142,50 +123,20 @@ h1 {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  font-size: clamp(2.4rem, 12vw, 6rem);
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.45);
-  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.65);
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-  opacity: 0;
-  transition: opacity 0.25s;
   z-index: 2;
+  color: var(--white);
+  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.65), 0 0 4px rgba(0,0,0,0.5);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.board-overlay .coord-text {
+  font-size: clamp(4rem, 16vw, 9rem);
+  letter-spacing: 0.04em;
+  line-height: 1;
   text-align: center;
-  padding: 0 10px;
-  line-height: 1.05;
-}
-.board-overlay.active { opacity: 1; }
-
-/* Полоса прогресса авторежима */
-.progress-track {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 4px;
-  background: rgba(0, 0, 0, 0.35);
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
-  z-index: 3;
-}
-.progress-track.active { opacity: 1; }
-
-.progress-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--green), var(--good));
-}
-.progress-fill.animating {
-  animation: fillProgress linear forwards;
-}
-@keyframes fillProgress {
-  from { width: 0%; }
-  to   { width: 100%; }
 }
 
-/* Клетки */
 .square {
   position: relative;
   cursor: pointer;
@@ -195,7 +146,6 @@ h1 {
 .square.light { background: var(--sq-light); }
 .square.dark  { background: var(--sq-dark); }
 
-/* Вспышки ответа */
 .square::before {
   content: '';
   position: absolute;
@@ -204,63 +154,23 @@ h1 {
   pointer-events: none;
   z-index: 2;
 }
-.square.correct::before {
-  background: rgba(126, 200, 80, 0.92);
-  animation: flash 0.5s ease-out;
-}
-.square.wrong::before {
-  background: rgba(224, 82, 82, 0.92);
-  animation: flash 0.7s ease-out;
-}
-@keyframes flash {
-  0%   { opacity: 1; }
-  100% { opacity: 0; }
-}
+.square.correct::before { background: rgba(126, 200, 80, 0.92); animation: flash 0.5s ease-out; }
+.square.wrong::before { background: rgba(224, 82, 82, 0.92); animation: flash 0.7s ease-out; }
+@keyframes flash { 0% { opacity: 1; } 100% { opacity: 0; } }
 
-/* Координата на клетке после ответа */
-.square.target-marker::after {
-  content: attr(data-square);
+.square.selected::after {
+  content: '';
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: clamp(14px, 3.2vw, 24px);
-  font-weight: 800;
+  inset: 4px;
+  border: 3px solid #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.5);
   pointer-events: none;
-  z-index: 3;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
-  animation: markerFade 0.5s ease-out forwards;
-}
-@keyframes markerFade {
-  0%   { opacity: 0; transform: scale(0.6); }
-  40%  { opacity: 1; transform: scale(1.1); }
-  100% { opacity: 1; transform: scale(1); }
+  z-index: 4;
 }
 
-/* Метки координат на доске */
-.label {
-  position: absolute;
-  font-size: clamp(8px, 1.7vw, 12px);
-  font-weight: 700;
-  pointer-events: none;
-  opacity: 0.85;
-}
-.rank-label { top: 2px; left: 3px; }
-.file-label { bottom: 2px; right: 3px; }
-.square.light .label { color: var(--sq-dark); }
-.square.dark  .label { color: var(--sq-light); }
-
-/* Статистика */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  transition: all 0.2s;
-}
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; transition: all 0.2s; }
 .stats.auto-mode { display: none; }
-
 .stat {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -268,170 +178,52 @@ h1 {
   padding: 9px 4px;
   text-align: center;
 }
-.stat-value {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--white);
-  font-variant-numeric: tabular-nums;
-}
-.stat-label {
-  font-size: 0.66rem;
-  color: var(--text-dim);
-  margin-top: 1px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
+.stat-value { font-size: 1.35rem; font-weight: 700; color: var(--white); font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 0.66rem; color: var(--text-dim); margin-top: 1px; text-transform: uppercase; letter-spacing: 0.06em; }
 .stat.good .stat-value { color: var(--good); }
 .stat.bad  .stat-value { color: var(--bad); }
 
-/* Ползунок скорости */
-.speed-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 2px;
-}
-.speed-label {
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-}
+.speed-row { display: flex; align-items: center; gap: 10px; padding: 4px 2px; }
+.speed-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
 .speed-slider {
-  flex: 1;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(
-    to right,
-    var(--green) 0%,
-    var(--green) var(--fill, 33%),
-    var(--border) var(--fill, 33%),
-    var(--border) 100%
-  );
-  outline: none;
-  cursor: pointer;
+  flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, var(--green) 0%, var(--green) var(--fill, 33%), var(--border) var(--fill, 33%), var(--border) 100%);
+  outline: none; cursor: pointer;
 }
 .speed-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--green);
-  cursor: pointer;
-  border: 2px solid var(--bg);
-  box-shadow: 0 0 0 1px var(--green);
+  -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--green); cursor: pointer; border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--green);
   transition: transform 0.1s;
 }
 .speed-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .speed-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--green);
-  cursor: pointer;
-  border: 2px solid var(--bg);
-  box-shadow: 0 0 0 1px var(--green);
+  width: 16px; height: 16px; border-radius: 50%; background: var(--green); cursor: pointer;
+  border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--green);
 }
-.speed-slider::-moz-range-track {
-  height: 4px;
-  border-radius: 2px;
-  background: transparent;
-}
-.speed-value {
-  min-width: 42px;
-  text-align: right;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--white);
-  font-variant-numeric: tabular-nums;
-}
+.speed-slider::-moz-range-track { height: 4px; border-radius: 2px; background: transparent; }
+.speed-value { min-width: 42px; text-align: right; font-size: 0.85rem; font-weight: 700; color: var(--white); font-variant-numeric: tabular-nums; }
 
-/* Кнопки */
 .controls { display: flex; gap: 8px; }
-
 .btn {
-  flex: 1;
-  padding: 12px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: #d0d0d0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  font-family: inherit;
-  white-space: nowrap;
+  flex: 1; padding: 12px 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--panel); color: #d0d0d0; font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; font-family: inherit; white-space: nowrap;
 }
 .btn:hover { background: var(--panel-hover); border-color: var(--border-hover); }
 .btn:active { transform: translateY(1px); }
+.btn.stop-btn.stopped { background: var(--warn); color: #fff; border-color: var(--warn); }
+.btn.stop-btn.stopped:hover { background: var(--warn-hover); border-color: var(--warn-hover); }
 
-.btn.stop-btn.stopped {
-  background: var(--warn);
-  color: #fff;
-  border-color: var(--warn);
-}
-.btn.stop-btn.stopped:hover {
-  background: var(--warn-hover);
-  border-color: var(--warn-hover);
-}
-
-/* Коробочка: кнопка звука + переключатель озвучки цвета */
 .sound-box {
-  display: flex;
-  align-items: stretch;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  border-radius: 8px;
-  overflow: hidden;
-  flex: 0 0 auto;
+  display: flex; align-items: stretch; border: 1px solid var(--border);
+  background: var(--panel); border-radius: 8px; overflow: hidden; flex: 0 0 auto;
 }
-.sound-box .btn.sound {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 12px 12px;
-  flex: 0 0 auto;
-}
+.sound-box .btn.sound { border: none; border-radius: 0; background: transparent; padding: 12px 12px; flex: 0 0 auto; }
 .sound-box .btn.sound:hover { background: var(--panel-hover); }
 
-.sound-color-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 10px;
-  border-left: 1px solid var(--border);
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s;
-}
-.sound-color-toggle:hover { background: var(--panel-hover); }
-.sound-color-toggle input { display: none; }
-
-.color-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--text-dim);
-  background: transparent;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-}
-.sound-color-toggle input:checked + .color-dot {
-  border-color: var(--green);
-  background: var(--green);
-  box-shadow: 0 0 0 2px rgba(98, 153, 36, 0.25);
-}
-
-/* Адаптив */
-@media (max-width: 400px) {
-  .target-value { font-size: 2.4rem; }
-  .target-value.small { font-size: 1.5rem; }
-  .btn { font-size: 0.78rem; padding: 11px 4px; }
-  .segmented button { font-size: 0.74rem; padding: 9px 4px; }
-  .speed-label { font-size: 0.66rem; }
-  .sound-box .btn.sound { padding: 11px 10px; }
+@media (max-width: 700px) {
+  .layout { flex-direction: column; align-items: center; }
+  .side-panel { width: 100%; max-width: 520px; order: 2; }
+  .main-content { order: 1; width: 100%; }
+  .board-overlay .coord-text { font-size: clamp(3rem, 12vw, 6rem); }
 }
