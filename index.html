@@ -22,36 +22,48 @@
       <button data-task="diagonals">⟋ Диагонали</button>
     </div>
 
-    <div class="target-card" id="targetCard">
-      <span class="chess-piece w" id="displayPiece">♔</span>
+    <div class="segmented" id="pieceSelector" style="flex-direction: column;">
+      <button data-piece="random" class="active">🎲 Рандом</button>
+      <button data-piece="bishop">♗ Слон</button>
+      <button data-piece="knight">♘ Конь</button>
+      <button data-piece="rook">♖ Ладья</button>
+      <button data-piece="queen">♕ Ферзь</button>
+    </div>
+
+    <div class="target-card">
+      <div class="chess-piece random-placeholder" id="displayPiece">🎲</div>
     </div>
     
-    <div class="speed-row" id="speedRow" style="display:none;">
-      <span class="speed-label">Скор.</span>
-      <input type="range" class="speed-slider" id="speedSlider" min="200" max="5000" step="100" value="2000">
-      <span class="speed-value" id="speedValue">2.0с</span>
+    <div class="toggle-container">
+      <div class="toggle-item active" id="toggleCoord">
+        <span>Координаты</span>
+        <div class="toggle-switch"></div>
+      </div>
+      <div class="toggle-item active" id="toggleColor">
+        <span>Цвет поля</span>
+        <div class="toggle-switch"></div>
+      </div>
+      <div class="toggle-item active" id="diagToggleWrap">
+        <span>Цвет диагонали</span>
+        <div class="toggle-switch"></div>
+      </div>
     </div>
 
     <div class="controls">
       <button class="btn" id="resetBtn">↺ Сброс</button>
-      <button class="btn" id="flipBtn">⇅ Перевернуть</button>
-    </div>
-    
-    <div class="controls" style="justify-content: center;">
-      <button class="btn stop-btn" id="stopBtn" style="display:none; flex: 1;">⏸ Стоп</button>
-      <div class="sound-box">
-        <button class="btn sound" id="soundBtn" title="Звук вкл/выкл">🔇</button>
-      </div>
+      <button class="btn stop-btn" id="stopBtn" style="display:none;">▶ Старт</button>
     </div>
   </div>
 
   <div class="main-content">
-    <div class="board-wrap">
-      <div class="board" id="board"></div>
-      <div class="board-overlay" id="boardOverlay"></div>
+    <div class="board-wrap" id="boardWrap">
+      <div class="board" id="board">
+        <div class="board-overlay" id="boardOverlay"></div>
+        <div class="board-piece hidden" id="boardPiece"></div>
+      </div>
     </div>
 
-    <div class="stats" id="stats">
+    <div class="stats">
       <div class="stat good"><div class="stat-value" id="scoreCorrect">0</div><div class="stat-label">Верно</div></div>
       <div class="stat bad"><div class="stat-value" id="scoreWrong">0</div><div class="stat-label">Ошибок</div></div>
       <div class="stat"><div class="stat-value" id="scoreStreak">0</div><div class="stat-label">Серия</div></div>
