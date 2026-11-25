@@ -25,6 +25,7 @@
   const boardEl = document.getElementById('board');
   const boardPiece = document.getElementById('boardPiece');
   const boardOverlay = document.getElementById('boardOverlay');
+  
   const statsEl = document.getElementById('stats');
   const stopBtn = document.getElementById('stopBtn');
   const modeSelector = document.getElementById('modeSelector');
@@ -142,22 +143,25 @@
   }
 
   function updateSidePanel() {
+    const displayPiece = document.getElementById('displayPiece');
     if (state.pieceType === 'random') {
       boardPiece.classList.add('hidden');
-      document.getElementById('displayPiece').className = 'chess-piece random-placeholder';
-      document.getElementById('displayPiece').textContent = '🎲';
-      document.getElementById('displayPiece').style.backgroundImage = 'none';
+      displayPiece.className = 'chess-piece random-placeholder';
+      displayPiece.textContent = '🎲';
+      displayPiece.style.backgroundImage = 'none';
       return;
     }
 
     boardPiece.classList.remove('hidden');
-    document.getElementById('displayPiece').className = 'chess-piece';
-    document.getElementById('displayPiece').textContent = '';
+    displayPiece.className = 'chess-piece';
+    displayPiece.textContent = ''; // Убираем юникод
     
     const color = state.orientation === 'white' ? 'w' : 'b';
     const pieceChar = PIECE_CHARS[state.pieceType];
     const pieceClass = `${color}${pieceChar.toUpperCase()}`;
-    document.getElementById('displayPiece').style.backgroundImage = `url('${MERIDA_URL}${pieceClass}.svg')`;
+    
+    // Ставим картинку с GitHub
+    displayPiece.style.backgroundImage = `url('${MERIDA_URL}${pieceClass}.svg')`;
     boardPiece.style.backgroundImage = `url('${MERIDA_URL}${pieceClass}.svg')`;
   }
 
@@ -388,22 +392,18 @@
     });
     
     stopBtn.style.display = (mode === 'auto') ? '' : 'none';
-    statsEl.classList.toggle('auto-mode', mode === 'auto');
+    if (statsEl) statsEl.classList.toggle('auto-mode', mode === 'auto');
 
     sessionToken++;
     clearAutoTimer();
     state.locked = false;
     state.streak = 0;
-    
-    // По умолчанию при переходе в авто ставим на паузу
     state.autoRunning = false;
-    
     state.currentSquare = null;
     state.currentDiag = null;
     
     updateStopBtn();
     updateStats();
-    
     nextQuestion();
   }
 
@@ -436,7 +436,7 @@
       b.classList.toggle('active', b.dataset.task === state.task);
     });
     
-    diagToggleWrap.style.display = (state.task === 'diagonals') ? 'flex' : 'none';
+    if (diagToggleWrap) diagToggleWrap.style.display = (state.task === 'diagonals') ? 'flex' : 'none';
     
     sessionToken++;
     clearAutoTimer();
