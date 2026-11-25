@@ -2,53 +2,39 @@
   'use strict';
 
   const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-  const boardEl = document.getElementById('board');
-  const boardOverlay = document.getElementById('boardOverlay');
-  
-  const displayPiece = document.getElementById('displayPiece');
-  
-  const statsEl = document.getElementById('stats');
-  const modeSelector = document.getElementById('modeSelector');
-  const taskSelector = document.getElementById('taskSelector');
-  const speedRow = document.getElementById('speedRow');
-  const speedSlider = document.getElementById('speedSlider');
-  const speedValue = document.getElementById('speedValue');
-  const stopBtn = document.getElementById('stopBtn');
-  const soundBtn = document.getElementById('soundBtn');
-
-  const SLIDER_MIN = 200;
-  const SLIDER_MAX = 5000;
-  
-  const WHITE_KING = '♔';
-  const BLACK_KING = '♚';
+  const PIECE_CHARS = { bishop: 'b', knight: 'n', rook: 'r', queen: 'q' };
+  const MERIDA_URL = 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/merida/';
 
   const state = {
-    orientation: 'white', // 'white' | 'black'
     mode: 'training',
     task: 'squares',
-    target: null,
+    pieceType: 'random',
+    orientation: 'white',
+    currentSquare: null,
+    currentDiag: null,
     correct: 0, wrong: 0, streak: 0, best: 0,
-    locked: false, sound: false, speed: 2000, autoRunning: true, selected: null
+    locked: false,
+    speakCoord: true, speakColor: true, speakDiagColor: true,
+    visited: new Set(),
+    autoRunning: false
   };
 
   let autoTimer = null;
   let sessionToken = 0;
-  let speakToken = 0;
+  
+  const boardEl = document.getElementById('board');
+  const boardPiece = document.getElementById('boardPiece');
+  const boardOverlay = document.getElementById('boardOverlay');
+  const statsEl = document.getElementById('stats');
+  const stopBtn = document.getElementById('stopBtn');
+  const modeSelector = document.getElementById('modeSelector');
+  const taskSelector = document.getElementById('taskSelector');
+  const diagToggleWrap = document.getElementById('diagToggleWrap');
 
-  /* ---------- Генерация пулов ---------- */
-  function getAllSquares() {
-    const pool = [];
-    for (let f = 0; f < 8; f++) {
-      for (let r = 1; r <= 8; r++) {
-        const id = FILES[f] + r;
-        const isLight = ((f + (r - 1)) % 2 !== 0);
-        const quadrant = (f < 4 ? 0 : 1) + (r <= 4 ? 2 : 0);
-        pool.push({ id, cells: [id], isLight, quadrant });
-      }
-    }
-    return pool;
-  }
+  const ALL_SQUARES = [];
+  for (let f = 0; f < 8; f++) for (let r = 1; r <= 8; r++) ALL_SQUARES.push({ id: FILES[f] + r });
 
+  /* ---------- Генерация диагоналей ---------- */
   function getAllDiagonals() {
     const pool = [];
     const seen = new Set();
@@ -81,380 +67,346 @@
         const rIdx = parseInt(first[1], 10) - 1;
         const isLight = ((fIdx + rIdx) % 2 !== 0);
         
-        pool.push({ id: key, cells, isLight, direction: dir.name });
+        pool.push({ id: key, cells, isLight });
       }
     }
     return pool;
   }
-
-  const ALL_SQUARES = getAllSquares();
   const ALL_DIAGONALS = getAllDiagonals();
 
-  /* ---------- Умное перемешивание ---------- */
-  function smartShuffle(array, prevItem, isDiagonal = false) {
-    const arr = [...array];
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    if (!prevItem) return arr;
-
-    let attempts = 0;
-    while (attempts < 10) {
-      const first = arr[0];
-      let tooSimilar = false;
-      if (isDiagonal) {
-        if (first.direction === prevItem.direction) tooSimilar = true;
-      } else {
-        if (first.quadrant === prevItem.quadrant) tooSimilar = true;
-      }
-      if (!tooSimilar) break;
-      const swapIdx = Math.floor(Math.random() * (arr.length - 1)) + 1;
-      [arr[0], arr[swapIdx]] = [arr[swapIdx], arr[0]];
-      attempts++;
-    }
-    return arr;
-  }
-
-  /* ---------- Мешки ---------- */
-  let squareBag = [];
-  let diagonalBag = [];
-  let lastSquare = null;
-  let lastDiagonal = null;
-
-  function getNextSquare() {
-    if (squareBag.length === 0) squareBag = smartShuffle(ALL_SQUARES, lastSquare, false);
-    lastSquare = squareBag.pop();
-    return lastSquare;
-  }
-
-  function getNextDiagonal() {
-    if (diagonalBag.length === 0) diagonalBag = smartShuffle(ALL_DIAGONALS, lastDiagonal, true);
-    lastDiagonal = diagonalBag.pop();
-    return lastDiagonal;
-  }
-
-  /* ---------- Звук ---------- */
-  let audioCtx = null;
-  function beep(freq, duration, type = 'sine') {
-    if (!state.sound) return;
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc  = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = type;
-      osc.frequency.value = freq;
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      const now = audioCtx.currentTime;
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-      osc.start(now);
-      osc.stop(now + duration + 0.02);
-    } catch (e) {}
-  }
-
-  /* ---------- Озвучка ---------- */
-  let voiceRu = null;
-  function pickVoice() {
-    if (!window.speechSynthesis) return;
-    const voices = speechSynthesis.getVoices();
-    voiceRu = voices.find(v => v.lang === 'ru-RU') ||
-              voices.find(v => v.lang && v.lang.toLowerCase().startsWith('ru')) || null;
-  }
-  if (window.speechSynthesis) {
-    pickVoice();
-    speechSynthesis.onvoiceschanged = pickVoice;
-  }
-
-  function speak(text) {
-    if (!state.sound || !window.speechSynthesis || !text) return Promise.resolve();
-    try {
-      speechSynthesis.cancel();
-      const myToken = ++speakToken;
-      return new Promise((resolve) => {
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = 'ru-RU';
-        if (voiceRu) u.voice = voiceRu;
-        u.rate = 1.1;
-        u.pitch = 1;
-        u.volume = 1;
-        let done = false;
-        const finish = () => { if (done) return; done = true; resolve(); };
-        u.onend = finish;
-        u.onerror = finish;
-        const est = Math.max(600, Math.min(6000, text.length * 110 + 400));
-        setTimeout(() => { if (myToken === speakToken) finish(); }, est);
-        speechSynthesis.speak(u);
-      });
-    } catch (e) {
-      return Promise.resolve();
-    }
-  }
-
-  const LETTER_RU = { a:'а', b:'бэ', c:'цэ', d:'дэ', e:'е', f:'эф', g:'жэ', h:'аш' };
-  function coordRu(sq) { return (LETTER_RU[sq[0]] || sq[0]) + ' ' + sq[1]; }
-
-  function speakTarget() {
-    if (!state.target) return Promise.resolve();
-    if (state.task === 'diagonals') {
-      const [a, b] = state.target.id.split('-');
-      return speak(coordRu(a) + ' — ' + coordRu(b) + ', ' + (state.target.isLight ? 'светлая' : 'тёмная') + ' диагональ');
-    }
-    return speak(coordRu(state.target.id) + ', ' + (state.target.isLight ? 'светлая' : 'тёмная'));
-  }
-
-  /* ---------- Отрисовка ---------- */
+  /* ---------- Отрисовка доски ---------- */
   function renderBoard() {
-    boardEl.innerHTML = '';
+    boardEl.querySelectorAll('.square').forEach(el => el.remove());
+
     const files = state.orientation === 'white' ? FILES : [...FILES].reverse();
     const ranks = state.orientation === 'white' ? [8,7,6,5,4,3,2,1] : [1,2,3,4,5,6,7,8];
 
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
+        const file = files[c];
+        const rank = ranks[r];
         const sq = document.createElement('div');
         sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
-        sq.dataset.square = files[c] + ranks[r];
+        sq.dataset.square = file + rank;
         sq.addEventListener('click', () => onSquareClick(sq));
         boardEl.appendChild(sq);
       }
     }
+    boardEl.appendChild(boardOverlay);
+    boardEl.appendChild(boardPiece);
   }
 
-  function refreshDisplay() {
-    const isWhiteSide = state.orientation === 'white';
-    displayPiece.textContent = isWhiteSide ? WHITE_KING : BLACK_KING;
-    displayPiece.className = `chess-piece ${isWhiteSide ? 'w' : 'b'}`;
+  /* ---------- Логика фигур ---------- */
+  function getMoves(piece, pos) {
+    const f = FILES.indexOf(pos[0]);
+    const r = parseInt(pos[1], 10) - 1;
+    const moves = [];
 
-    if (!state.target) {
-      boardOverlay.innerHTML = '';
+    const add = (df, dr) => {
+      let nf = f + df, nr = r + dr;
+      while (nf >= 0 && nf <= 7 && nr >= 0 && nr <= 7) {
+        moves.push(FILES[nf] + (nr + 1));
+        nf += df; nr += dr;
+      }
+    };
+
+    if (piece === 'bishop') { add(1,1); add(1,-1); add(-1,1); add(-1,-1); }
+    if (piece === 'rook') { add(1,0); add(-1,0); add(0,1); add(0,-1); }
+    if (piece === 'queen') { add(1,1); add(1,-1); add(-1,1); add(-1,-1); add(1,0); add(-1,0); add(0,1); add(0,-1); }
+    if (piece === 'knight') {
+      [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]].forEach(([df, dr]) => {
+        const nf = f + df, nr = r + dr;
+        if (nf >= 0 && nf <= 7 && nr >= 0 && nr <= 7) moves.push(FILES[nf] + (nr + 1));
+      });
+    }
+    return moves;
+  }
+
+  /* ---------- Позиционирование и анимация ---------- */
+  function placePiece(square, animate = true) {
+    const f = FILES.indexOf(square[0]);
+    const r = parseInt(square[1], 10) - 1;
+
+    boardPiece.style.transition = animate ? 'transform 0.25s ease-in-out' : 'none';
+
+    let leftPercent, topPercent;
+    if (state.orientation === 'white') {
+      leftPercent = f * 12.5;
+      topPercent = (7 - r) * 12.5;
+    } else {
+      leftPercent = (7 - f) * 12.5;
+      topPercent = r * 12.5;
+    }
+
+    boardPiece.style.transform = `translate(${leftPercent * 8}%, ${topPercent * 8}%)`;
+  }
+
+  function updateSidePanel() {
+    if (state.pieceType === 'random') {
+      boardPiece.classList.add('hidden');
+      document.getElementById('displayPiece').className = 'chess-piece random-placeholder';
+      document.getElementById('displayPiece').textContent = '🎲';
+      document.getElementById('displayPiece').style.backgroundImage = 'none';
       return;
     }
-    boardOverlay.innerHTML = `<span class="coord-text">${state.target.id}</span>`;
+
+    boardPiece.classList.remove('hidden');
+    document.getElementById('displayPiece').className = 'chess-piece';
+    document.getElementById('displayPiece').textContent = '';
+    
+    const color = state.orientation === 'white' ? 'w' : 'b';
+    const pieceChar = PIECE_CHARS[state.pieceType];
+    const pieceClass = `${color}${pieceChar.toUpperCase()}`;
+    document.getElementById('displayPiece').style.backgroundImage = `url('${MERIDA_URL}${pieceClass}.svg')`;
+    boardPiece.style.backgroundImage = `url('${MERIDA_URL}${pieceClass}.svg')`;
   }
 
-  /* ---------- Таймер ---------- */
+  /* ---------- Ходы и логика ---------- */
+  function makeRandomMove() {
+    if (state.task === 'diagonals') {
+      let diag;
+      do {
+        diag = ALL_DIAGONALS[Math.floor(Math.random() * ALL_DIAGONALS.length)];
+      } while (state.currentDiag && diag.id === state.currentDiag.id);
+      
+      state.currentDiag = diag;
+      state.currentSquare = null;
+      return;
+    }
+
+    if (state.pieceType === 'random') {
+      let nextSq;
+      do {
+        nextSq = ALL_SQUARES[Math.floor(Math.random() * 64)].id;
+      } while (nextSq === state.currentSquare && ALL_SQUARES.length > 1);
+      
+      state.currentSquare = nextSq;
+      return;
+    }
+
+    if (!state.currentSquare) {
+      state.currentSquare = ALL_SQUARES[Math.floor(Math.random() * 64)].id;
+      state.visited.add(state.currentSquare);
+      placePiece(state.currentSquare, false);
+      return;
+    }
+
+    const moves = getMoves(state.pieceType, state.currentSquare);
+    const unvisited = moves.filter(m => !state.visited.has(m));
+    const pool = unvisited.length > 0 ? unvisited : moves.filter(m => m !== state.currentSquare);
+    
+    if (pool.length > 0) {
+      const nextSq = pool[Math.floor(Math.random() * pool.length)];
+      state.currentSquare = nextSq;
+      state.visited.add(nextSq);
+      placePiece(nextSq, true);
+    } else {
+      state.currentSquare = null;
+      makeRandomMove();
+    }
+  }
+
+  /* ---------- Озвучка ---------- */
+  function speak(text) {
+    if ((!state.speakCoord && !state.speakColor && !state.speakDiagColor) || !window.speechSynthesis || !text) {
+      return Promise.resolve();
+    }
+    
+    speechSynthesis.cancel();
+    return new Promise((resolve) => {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ru-RU';
+      u.rate = 1.2;
+      
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(); } };
+      u.onend = finish;
+      u.onerror = finish;
+      
+      const est = Math.max(600, Math.min(4000, text.length * 100 + 300));
+      setTimeout(() => { if (!done) finish(); }, est);
+      
+      speechSynthesis.speak(u);
+    });
+  }
+
+  async function speakTarget() {
+    let parts = [];
+    
+    if (state.task === 'diagonals' && state.currentDiag) {
+      if (state.speakCoord) parts.push(state.currentDiag.id);
+      if (state.speakDiagColor) parts.push(state.currentDiag.isLight ? 'светлая' : 'тёмная');
+    } else if (state.currentSquare) {
+      if (state.speakCoord) parts.push(state.currentSquare[0] + ' ' + state.currentSquare[1]);
+      if (state.speakColor) {
+        const f = FILES.indexOf(state.currentSquare[0]);
+        const r = parseInt(state.currentSquare[1], 10) - 1;
+        parts.push(((f + r) % 2 !== 0) ? 'светлая' : 'тёмная');
+      }
+    }
+    
+    if (parts.length > 0) {
+      await speak(parts.join(', '));
+    }
+  }
+
+  /* ---------- Игровой цикл ---------- */
+  async function nextQuestion() {
+    clearAutoTimer();
+    state.locked = false;
+    
+    makeRandomMove();
+    updateSidePanel();
+    
+    if (state.task === 'diagonals' && state.currentDiag) {
+      boardOverlay.innerHTML = `<span class="coord-text small">${state.currentDiag.id}</span>`;
+      boardPiece.classList.add('hidden');
+    } else if (state.currentSquare) {
+      boardOverlay.innerHTML = `<span class="coord-text">${state.currentSquare}</span>`;
+      
+      if (state.mode === 'auto' && state.pieceType !== 'random') {
+        boardPiece.classList.remove('hidden');
+      } else {
+        boardPiece.classList.add('hidden');
+      }
+    }
+    
+    const token = ++sessionToken;
+    
+    await speakTarget();
+    
+    if (token !== sessionToken) return;
+    
+    if (state.mode === 'auto' && state.autoRunning) {
+      startAutoTimer();
+    }
+  }
+
+  function onSquareClick(sq) {
+    if (state.locked) return;
+    if (state.mode === 'auto') return;
+    
+    const square = sq.dataset.square;
+    let isCorrect = false;
+
+    if (state.task === 'diagonals' && state.currentDiag) {
+      const ends = [state.currentDiag.cells[0], state.currentDiag.cells[state.currentDiag.cells.length - 1]];
+      isCorrect = ends.includes(square);
+    } else {
+      isCorrect = square === state.currentSquare;
+    }
+    
+    if (isCorrect) {
+      state.locked = true;
+      state.correct++;
+      state.streak++;
+      if (state.streak > state.best) state.best = state.streak;
+      
+      if (state.task === 'diagonals' && state.currentDiag) {
+        state.currentDiag.cells.forEach(c => {
+          const el = boardEl.querySelector(`[data-square="${c}"]`);
+          if (el) el.classList.add('correct');
+        });
+      } else {
+        sq.classList.add('correct');
+      }
+      
+      const token = ++sessionToken;
+      setTimeout(() => {
+        if (token !== sessionToken) return;
+        if (state.task === 'diagonals' && state.currentDiag) {
+          state.currentDiag.cells.forEach(c => {
+            const el = boardEl.querySelector(`[data-square="${c}"]`);
+            if (el) el.classList.remove('correct');
+          });
+        } else {
+          sq.classList.remove('correct');
+        }
+        nextQuestion();
+      }, 500);
+    } else {
+      state.wrong++;
+      state.streak = 0;
+      sq.classList.add('wrong');
+      
+      if (state.task === 'diagonals' && state.currentDiag) {
+        state.currentDiag.cells.forEach(c => {
+          const el = boardEl.querySelector(`[data-square="${c}"]`);
+          if (el) el.classList.add('correct');
+        });
+      } else {
+        const correctSq = boardEl.querySelector(`[data-square="${state.currentSquare}"]`);
+        if (correctSq) correctSq.classList.add('correct');
+      }
+
+      const token = ++sessionToken;
+      setTimeout(() => {
+        if (token !== sessionToken) return;
+        sq.classList.remove('wrong');
+        
+        if (state.task === 'diagonals' && state.currentDiag) {
+          state.currentDiag.cells.forEach(c => {
+            const el = boardEl.querySelector(`[data-square="${c}"]`);
+            if (el) el.classList.remove('correct');
+          });
+        } else {
+          const correctSq = boardEl.querySelector(`[data-square="${state.currentSquare}"]`);
+          if (correctSq) correctSq.classList.remove('correct');
+        }
+        nextQuestion();
+      }, 800);
+    }
+    updateStats();
+  }
+
   function startAutoTimer() {
     clearAutoTimer();
-    if (state.mode !== 'auto' || !state.autoRunning) return;
-
-    autoTimer = setTimeout(handleTimeout, state.speed);
+    if (!state.autoRunning) return;
+    
+    autoTimer = setTimeout(() => {
+      if (!state.autoRunning) return;
+      nextQuestion();
+    }, 500);
   }
 
   function clearAutoTimer() {
     if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
   }
 
-  function handleTimeout() {
-    autoTimer = null;
-    if (state.mode !== 'auto' || !state.autoRunning || !state.target) return;
-    state.locked = true;
-    revealCorrect();
-    const token = ++sessionToken;
-    setTimeout(() => {
-      if (token !== sessionToken) return;
-      clearReveal();
-      state.locked = false;
-      nextTarget();
-    }, 600);
-  }
-
-  /* ---------- Подсветка ---------- */
-  function revealCorrect() {
-    if (!state.target) return;
-    state.target.cells.forEach(c => {
-      const el = boardEl.querySelector(`[data-square="${c}"]`);
-      if (el) el.classList.add('correct');
-    });
-  }
-
-  function clearReveal() {
-    boardEl.querySelectorAll('.correct, .wrong, .selected').forEach(el =>
-      el.classList.remove('correct', 'wrong', 'selected')
-    );
-    state.selected = null;
-  }
-
-  /* ---------- Клики ---------- */
-  function onSquareClick(sq) {
-    if (!state.target) return;
-    if (state.locked && state.mode === 'training') return;
-    const square = sq.dataset.square;
-
-    if (state.task === 'diagonals') {
-      onDiagonalClick(sq, square);
-    } else {
-      onSquareSimpleClick(sq, square);
-    }
-  }
-
-  function onSquareSimpleClick(sq, square) {
-    const correct = square === state.target.id;
-
-    if (state.mode === 'training') {
-      clearAutoTimer();
-      state.locked = true;
-      const token = ++sessionToken;
-
-      if (correct) {
-        sq.classList.add('correct');
-        beep(880, 0.09, 'sine');
-        state.correct++;
-        state.streak++;
-        if (state.streak > state.best) state.best = state.streak;
-        updateStats();
-        setTimeout(() => {
-          if (token !== sessionToken) return;
-          clearReveal();
-          state.locked = false;
-          nextTarget();
-        }, 320);
-      } else {
-        sq.classList.add('wrong');
-        beep(160, 0.22, 'sawtooth');
-        state.wrong++;
-        state.streak = 0;
-        updateStats();
-        revealCorrect();
-        setTimeout(() => {
-          if (token !== sessionToken) return;
-          clearReveal();
-          state.locked = false;
-          nextTarget();
-        }, 720);
-      }
-    } else {
-      if (correct) {
-        sq.classList.add('correct');
-        beep(880, 0.09, 'sine');
-      } else {
-        sq.classList.add('wrong');
-        beep(160, 0.22, 'sawtooth');
-      }
-      setTimeout(() => {
-        if (sq) sq.classList.remove('correct', 'wrong');
-      }, 400);
-    }
-  }
-
-  function onDiagonalClick(sq, square) {
-    const ends = [state.target.cells[0], state.target.cells[state.target.cells.length - 1]];
-
-    if (state.mode === 'training') {
-      if (!ends.includes(square)) {
-        if (state.selected) {
-          const prev = boardEl.querySelector(`[data-square="${state.selected}"]`);
-          if (prev) prev.classList.remove('selected');
-          state.selected = null;
-        }
-        sq.classList.add('wrong');
-        setTimeout(() => sq.classList.remove('wrong'), 720);
-        beep(160, 0.22, 'sawtooth');
-        state.wrong++;
-        state.streak = 0;
-        updateStats();
-        return;
-      }
-
-      if (!state.selected) {
-        state.selected = square;
-        sq.classList.add('selected');
-        beep(660, 0.06, 'sine');
-        return;
-      }
-
-      if (state.selected === square) {
-        sq.classList.remove('selected');
-        state.selected = null;
-        beep(440, 0.05, 'sine');
-        return;
-      }
-
-      clearAutoTimer();
-      state.locked = true;
-      const token = ++sessionToken;
-
-      state.target.cells.forEach(c => {
-        const el = boardEl.querySelector(`[data-square="${c}"]`);
-        if (el) el.classList.add('correct');
-      });
-      beep(880, 0.09, 'sine');
-
-      state.correct++;
-      state.streak++;
-      if (state.streak > state.best) state.best = state.streak;
-      updateStats();
-
-      setTimeout(() => {
-        if (token !== sessionToken) return;
-        clearReveal();
-        state.locked = false;
-        nextTarget();
-      }, 500);
-    } else {
-      if (!ends.includes(square)) {
-        sq.classList.add('wrong');
-        setTimeout(() => sq.classList.remove('wrong'), 400);
-        beep(160, 0.22, 'sawtooth');
-        return;
-      }
-
-      if (!state.selected) {
-        state.selected = square;
-        sq.classList.add('selected');
-        beep(660, 0.06, 'sine');
-        return;
-      }
-
-      if (state.selected === square) {
-        sq.classList.remove('selected');
-        state.selected = null;
-        beep(440, 0.05, 'sine');
-        return;
-      }
-
-      state.target.cells.forEach(c => {
-        const el = boardEl.querySelector(`[data-square="${c}"]`);
-        if (el) el.classList.add('correct');
-      });
-      beep(880, 0.09, 'sine');
-      setTimeout(() => {
-        boardEl.querySelectorAll('.correct').forEach(el => el.classList.remove('correct'));
-        boardEl.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
-        state.selected = null;
-      }, 400);
-    }
-  }
-
-  /* ---------- Новый вопрос ---------- */
-  async function nextTarget() {
-    clearReveal();
-
-    if (state.task === 'diagonals') {
-      state.target = getNextDiagonal();
-    } else {
-      state.target = getNextSquare();
-    }
-
-    refreshDisplay();
-
-    const token = ++sessionToken;
-    if (state.sound && window.speechSynthesis) {
-      await speakTarget();
-      if (token !== sessionToken) return;
-    }
-    startAutoTimer();
-  }
-
   function updateStats() {
     document.getElementById('scoreCorrect').textContent = state.correct;
-    document.getElementById('scoreWrong').textContent   = state.wrong;
-    document.getElementById('scoreStreak').textContent  = state.streak;
-    document.getElementById('scoreBest').textContent    = state.best;
+    document.getElementById('scoreWrong').textContent = state.wrong;
+    document.getElementById('scoreStreak').textContent = state.streak;
+    document.getElementById('scoreBest').textContent = state.best;
   }
 
-  /* ---------- Управление ---------- */
+  /* ---------- Переключение режимов ---------- */
+  function setMode(mode) {
+    state.mode = mode;
+    modeSelector.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    
+    stopBtn.style.display = (mode === 'auto') ? '' : 'none';
+    statsEl.classList.toggle('auto-mode', mode === 'auto');
+
+    sessionToken++;
+    clearAutoTimer();
+    state.locked = false;
+    state.streak = 0;
+    
+    // По умолчанию при переходе в авто ставим на паузу
+    state.autoRunning = false;
+    
+    state.currentSquare = null;
+    state.currentDiag = null;
+    
+    updateStopBtn();
+    updateStats();
+    
+    nextQuestion();
+  }
+
   function updateStopBtn() {
     if (state.autoRunning) {
       stopBtn.textContent = '⏸ Стоп';
@@ -465,9 +417,40 @@
     }
   }
 
+  /* ---------- Старт ---------- */
+  renderBoard();
+  nextQuestion();
+
+  modeSelector.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.dataset.mode === state.mode) return;
+    setMode(btn.dataset.mode);
+  });
+
+  taskSelector.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.dataset.task === state.task) return;
+    
+    state.task = btn.dataset.task;
+    taskSelector.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('active', b.dataset.task === state.task);
+    });
+    
+    diagToggleWrap.style.display = (state.task === 'diagonals') ? 'flex' : 'none';
+    
+    sessionToken++;
+    clearAutoTimer();
+    state.currentSquare = null;
+    state.currentDiag = null;
+    state.visited.clear();
+    
+    nextQuestion();
+  });
+
   stopBtn.addEventListener('click', () => {
     state.autoRunning = !state.autoRunning;
     updateStopBtn();
+    
     if (state.autoRunning) {
       if (!state.locked) startAutoTimer();
     } else {
@@ -476,109 +459,48 @@
     }
   });
 
-  function setMode(mode) {
-    state.mode = mode;
-    modeSelector.querySelectorAll('button').forEach(b => {
-      b.classList.toggle('active', b.dataset.mode === mode);
-    });
-    statsEl.classList.toggle('auto-mode', mode === 'auto');
-    speedRow.style.display = mode === 'auto' ? '' : 'none';
-    stopBtn.style.display   = mode === 'auto' ? '' : 'none';
-
-    sessionToken++;
-    clearAutoTimer();
-    clearReveal();
-    if (window.speechSynthesis) speechSynthesis.cancel();
-    state.locked = false;
-    state.streak = 0;
-    state.autoRunning = true;
-    updateStopBtn();
-    updateStats();
-    nextTarget();
-  }
-
-  taskSelector.addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
-    if (!btn || btn.dataset.task === state.task) return;
-
-    state.task = btn.dataset.task;
-    taskSelector.querySelectorAll('button').forEach(b =>
-      b.classList.toggle('active', b.dataset.task === state.task)
-    );
-
-    sessionToken++;
-    clearAutoTimer();
-    clearReveal();
-    if (window.speechSynthesis) speechSynthesis.cancel();
-    state.locked = false;
-    state.streak = 0;
-    updateStats();
-    nextTarget();
-  });
-
-  function updateSliderFill() {
-    const pct = ((state.speed - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100;
-    speedSlider.style.setProperty('--fill', pct + '%');
-  }
-
-  speedSlider.addEventListener('input', () => {
-    state.speed = parseInt(speedSlider.value, 10);
-    speedValue.textContent = (state.speed / 1000).toFixed(1) + 'с';
-    updateSliderFill();
-    if (state.mode === 'auto' && state.autoRunning) startAutoTimer();
-  });
-
-  modeSelector.addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
-    if (!btn || btn.dataset.mode === state.mode) return;
-    setMode(btn.dataset.mode);
-  });
-
-  document.getElementById('flipBtn').addEventListener('click', () => {
-    if (state.locked) return;
-    state.orientation = state.orientation === 'white' ? 'black' : 'white';
-    renderBoard();
-    refreshDisplay();
-    startAutoTimer();
-  });
-
   document.getElementById('resetBtn').addEventListener('click', () => {
     sessionToken++;
-    state.correct = 0;
-    state.wrong   = 0;
-    state.streak  = 0;
-    state.best    = 0;
-    state.locked  = false;
-    clearReveal();
-    updateStats();
     clearAutoTimer();
-    if (window.speechSynthesis) speechSynthesis.cancel();
+    state.visited.clear();
+    state.currentSquare = null;
+    state.currentDiag = null;
+    state.correct = 0; state.wrong = 0; state.streak = 0; state.best = 0;
+    updateStats();
+    nextQuestion();
+  });
+
+  document.getElementById('pieceSelector').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    state.pieceType = btn.dataset.piece;
+    document.querySelectorAll('#pieceSelector button').forEach(b => b.classList.toggle('active', b === btn));
     
-    squareBag = [];
-    diagonalBag = [];
-    lastSquare = null;
-    lastDiagonal = null;
+    boardPiece.classList.toggle('hidden', state.pieceType === 'random');
 
-    nextTarget();
+    clearAutoTimer();
+    state.visited.clear();
+    state.currentSquare = null;
+    state.currentDiag = null;
+    nextQuestion();
   });
 
-  soundBtn.addEventListener('click', () => {
-    state.sound = !state.sound;
-    soundBtn.textContent = state.sound ? '🔊' : '🔇';
-    if (!state.sound && window.speechSynthesis) speechSynthesis.cancel();
+  const toggleCoord = document.getElementById('toggleCoord');
+  const toggleColor = document.getElementById('toggleColor');
+
+  toggleCoord.addEventListener('click', () => {
+    state.speakCoord = !state.speakCoord;
+    toggleCoord.classList.toggle('active', state.speakCoord);
   });
 
-  document.addEventListener('click', function unlockSpeech() {
-    if (window.speechSynthesis) {
-      try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) {}
-    }
-    document.removeEventListener('click', unlockSpeech);
-  }, { once: true });
+  toggleColor.addEventListener('click', () => {
+    state.speakColor = !state.speakColor;
+    toggleColor.classList.toggle('active', state.speakColor);
+  });
 
-  /* ---------- Старт ---------- */
-  renderBoard();
-  updateStats();
-  updateSliderFill();
-  soundBtn.textContent = state.sound ? '🔊' : '🔇';
-  nextTarget();
+  diagToggleWrap.addEventListener('click', () => {
+    state.speakDiagColor = !state.speakDiagColor;
+    diagToggleWrap.classList.toggle('active', state.speakDiagColor);
+  });
+
 })();
